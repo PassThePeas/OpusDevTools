@@ -3,6 +3,21 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# --- OpusDevTools Specifics ---
+# local data files (incl. manifest files)
+/data/
+
+# temporary indexer files if any
+index.d.ts.tmp
+
+# --- VS Code specifics ---
+.vscode/projectHistory.json
+.history/
+*.log 
+
+
+
+
 # User-specific files
 *.rsuser
 *.suo
