@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": true,
+    "checkJs": false,
+    "lib": ["ES5", "ScriptHost"],
+    "paths": {
+      "opus-types": ["./OpusDevTools/typings/index.d.ts"]
+    }
+  },
+  "include": [
+    "index.d.ts",
+    "OpusDevTools/typings/index.d.ts",
+    "./**/*.js.txt",
+    "./**/*.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "OpusDevTools/documentation",
+    "OpusDevTools/data",
+    "**/Backups FixTypes/**",
+    "**/tmp_fix_types/**",
+    "inc_*.js"
+  ]
+}

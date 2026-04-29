@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "*.js.txt": "javascript"
+    },
+    "task.saveBeforeRun": "always",
+}
