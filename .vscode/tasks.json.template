@@ -1,0 +1,71 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Opus: Full Build (Type + Update Light + Update Index)",
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "Opus: Update Index",
+                "Opus: Update Light Definitions",
+                "Opus: Events typing with JSDoc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "_opusDevTools": {
+                "publish": true
+            }
+        },
+        {
+            "label": "Opus: Build Main index.d.ts",
+            "type": "process",
+            "command": ".\\.vscode\\opus_launcher.cmd",
+            "args": [
+                "BUILD_INDEX"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "_opusDevTools": {
+                "publish": true
+            }
+        },
+        {
+            "label": "Opus: Fix Types",
+            "type": "process",
+            "command": ".\\.vscode\\opus_launcher.cmd",
+            "args": [
+                "FIX_TYPES",
+                "${file}",
+                "/dopusdata/Script Addins"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "_opusDevTools": {
+                "publish": true
+            }
+        },
+        {
+            "label": "Opus: Generate Light Typings",
+            "type": "process",
+            "command": ".\\.vscode\\opus_launcher.cmd",
+            "args": [
+                "GENERATE_LIGHT"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "_opusDevTools": {
+                "publish": true
+            }
+        }
+    ]
+}
