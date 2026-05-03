@@ -31,6 +31,15 @@
         "description": "Forces global IntelliSense(API + Includes) on .js.txt files"
     },
 
+	"Opus Add_Include": {
+        "prefix": "//include",
+        "body": [
+            "//@@include inc_${1:incFileName}.js",
+            "$0"
+        ],
+        "description": "Inserts Opus include directive"
+    },
+
 	"Enumerator Loop": {
 		"prefix": "forenum",
 		"body": [
@@ -129,5 +138,5 @@
 		],
 		"description": "inserts jsdoc decoration to force next object type"
 	}
-	
+
 }

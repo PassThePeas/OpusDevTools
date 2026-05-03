@@ -1567,6 +1567,8 @@ declare global {
         tabgroups: TabGroups;
         /** This Vars object represents all defined variables with global scope. */
         vars: Vars;
+        /** This Vars object represents all defined variables with global scope. */
+        Vars: Vars;
         /** The Version object provides information about the current Opus program version. */
         version: Version;
         /** Returns a Viewers object which represents any currently open standalone image viewers (each one is represented by a Viewer object). */
