@@ -52,11 +52,11 @@
             }
         },
         {
-            "label": "Opus: Generate Light Typings",
+            "label": "Opus: Generate Minified Typings",
             "type": "process",
             "command": ".\\.vscode\\opus_launcher.cmd",
             "args": [
-                "GENERATE_LIGHT"
+                "GENERATE_MINIFIED"
             ],
             "problemMatcher": [],
             "presentation": {

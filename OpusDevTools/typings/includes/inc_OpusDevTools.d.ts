@@ -12,7 +12,7 @@ declare const global_Mode_Val_Standard: string;
 declare const global_Mode_Val_TestInstall: string;
 
 /**
- * OpusDT_FileDef class to manage git sync & installation[cite: 12]
+ * OpusDT_FileDef class to manage git sync & installation
  */
 declare class OpusDT_FileDef {
     /**
@@ -27,16 +27,17 @@ declare class OpusDT_FileDef {
     category: string;
     syncToRepo: boolean;
     isTaskExport: boolean;
-    generateCommand: string;
+    // Allows a string (command name) or a function accepting a string as a parameter
+    generateCommand: string | ((targetRoot: string) => void);
     manifestPath: string;
 
     /**
-     * Installs the file from a temporary folder to the workspace path.[cite: 12]
+     * Installs the file from a temporary folder to the workspace path.
      */
     install(tempFolder: string | Path, workspacePath: string | Path): void;
 
     /**
-     * Specialized internal methods for installation[cite: 12]
+     * Specialized internal methods for installation
      */
     doCopy(src: string | Path, dst: string | Path): void;
     doManifest(src: string | Path, dst: string | Path): void;
@@ -44,33 +45,43 @@ declare class OpusDT_FileDef {
     doGenerate(): void;
 
     /**
-     * Manifest management internal helpers[cite: 12]
+     * Manifest management internal helpers
      */
     _getManifest(): object;
     _updateManifest(newHash: string): void;
 }
 
 /**
- * Global helper functions shared via the include[cite: 12]
+ * Global helper functions shared via the include
  */
 
 /**
- * Returns the single source of truth for all managed files.[cite: 12]
+ * Generates index file in path depending on Opus Root provided (e.g. /dopusdata unless other requirements)
+ */
+declare function GenerateIndex(opusRoot: string | Path): void;
+
+/**
+ * Generates a stripped/minifed version of opus.d.ts in path depending on Opus Root provided (e.g. /dopusdata unless other requirements)
+ */
+declare function GenerateAiOpusTypings(opusRoot: string | Path): void;
+
+/**
+ * Returns the single source of truth for all managed files.
  */
 declare function GetManagedFilesList(): OpusDT_FileDef[];
 
 /**
- * Returns the current environment mode (STANDARD or TEST_INSTALL).[cite: 12]
+ * Returns the current environment mode (STANDARD or TEST_INSTALL).
  */
 declare function GetOpusDT_Mode(): string;
 
 /**
- * Returns the resolved root path for installation based on current mode.[cite: 12]
+ * Returns the resolved root path for installation based on current mode.
  */
 declare function GetOpusDT_Root(): string;
 
 /**
- * Returns the GitHub repository ZIP URL associated with the current mode.[cite: 12]
+ * Returns the GitHub repository ZIP URL associated with the current mode.
  */
 declare function GetOpusDT_RepoZipUrl(): string;
 

@@ -20,9 +20,9 @@ if "%~1"=="FIX_TYPES" (
     :: %~2 is the file to process (${file})
     :: %~3 is the destination folder
     "%FINAL_PATH%" /acmd OpusDT_FixTypes FILE="%~2" DEST_FOLDER="%~3"
-) else if "%~1"=="GENERATE_LIGHT" (
+) else if "%~1"=="GENERATE_MINIFIED" (
     :: No extra parameters needed as paths are hardcoded in JScript
-    "%FINAL_PATH%" /acmd OpusDT_GenerateLightTypings
+    "%FINAL_PATH%" /acmd OpusDT_GenerateMinifiedTypings
 ) else if "%~1"=="BUILD_INDEX" (
     "%FINAL_PATH%" /acmd OpusDT_GenerateIndex   
 ) else (
