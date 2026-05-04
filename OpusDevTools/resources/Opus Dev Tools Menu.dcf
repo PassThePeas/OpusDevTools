@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<button backcol="none" display="icon" label_pos="right" textcol="none" type="menu">
+	<label>Opus Dev Tools Menu</label>
+	<icon1>#otherplugins</icon1>
+	<button backcol="none" display="both" textcol="none">
+		<label>Fix (JSDoc) typings</label>
+		<tip>Acts on selected files (generate in tmp folder for review)</tip>
+		<icon1>#otherplugins</icon1>
+		<function type="normal">
+			<instruction>OpusDT_FixTypes</instruction>
+		</function>
+	</button>
+	<button backcol="none" display="both" textcol="none">
+		<label>Generate Personal Index</label>
+		<icon1>#otherplugins</icon1>
+		<function type="normal">
+			<instruction>OpusDT_GenerateIndex</instruction>
+		</function>
+	</button>
+	<button backcol="none" display="both" separate="yes" textcol="none">
+		<label>Generate Minified &lt;kbd&gt;.d.ts&lt;/kbd&gt;</label>
+		<icon1>#otherplugins</icon1>
+		<function type="normal">
+			<instruction>OpusDT_GenerateMinifiedTypings</instruction>
+		</function>
+	</button>
+	<button backcol="none" display="both" textcol="none">
+		<label>Install Opus Dev Tools</label>
+		<icon1>#otherplugins</icon1>
+		<function type="normal">
+			<instruction>OpusDT_Install</instruction>
+		</function>
+	</button>
+</button>
