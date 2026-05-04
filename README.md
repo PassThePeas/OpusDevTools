@@ -21,7 +21,7 @@ Download and run the installer:
 
 ### 2. Import the Menu
 To access commands directly from your Opus interface:
-👉 **[Download Opus Dev Tools Menu.dcf](OpusDevTools/resources/Opus Dev Tools Menu.dcf?raw=true)**
+👉 **[Download Opus Dev Tools Menu.dcf](<OpusDevTools/resources/Opus Dev Tools Menu.dcf?raw=true>)**
 *(Drag and drop this file onto your Opus toolbar while in Customize mode).*
 
 ---
