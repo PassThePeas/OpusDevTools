@@ -1,9 +1,10 @@
+![Directory Opus](https://img.shields.io/badge/Directory%20Opus-v13+-blue)
+
 <p align="center">
   <img src="OpusDevTools/resources/VScode layered with opus.png" width="128" height="128" alt="OpusDevTools Logo">
 </p>
 
 # OpusDevTools
-![Directory Opus](https://img.shields.io/badge/Directory%20Opus-v13+-blue)
 **The modern development ecosystem for Directory Opus scriptwriters.**
 
 OpusDevTools bridges the gap between **VS Code** and **Directory Opus**, providing a professional workflow for building, managing, and synchronizing your scripts with ease.
