@@ -8,7 +8,7 @@ This project uses a specialized workflow to maintain strong typing for shared `.
 > "You are a TypeScript Engineer expert in Directory Opus scripting. Generate exhaustive .d.ts files from JScript source code. Always map 'initData' to 'IncludeFileInitData'. Output only the TypeScript code."
 
 ## 2. Generation Workflow
-1.  Upload `OpusDevTools/typings/dopus.light.d.ts` as a reference file.
+1.  Upload `OpusDevTools/typings/dopus.ai.d.ts` as a reference file.
 2.  Upload your library file (e.g., `inc_MyUtils.js`).
 3.  **Prompt**: *"Generate the .d.ts for the provided JSscript file"*. 
     * *Optional*: You can ask to wrap the code in a **Namespace** (e.g., `MyUtilsNS`) to avoid global scope pollution and improve organization (**Prompt**: *"Use MyUtilsNS as the namespace"*).
