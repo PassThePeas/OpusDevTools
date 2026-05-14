@@ -7,6 +7,7 @@
 		<tip>Acts on selected files (generate in tmp folder for review)</tip>
 		<icon1>#otherplugins</icon1>
 		<function type="normal">
+			<instruction>@icon:/dopusdata/Script AddIns/OpusDevTools/resources/VScode layered with opus.png</instruction>
 			<instruction>OpusDT_FixTypes</instruction>
 		</function>
 	</button>
@@ -14,6 +15,7 @@
 		<label>Generate Personal Index</label>
 		<icon1>#otherplugins</icon1>
 		<function type="normal">
+			<instruction>@icon:/dopusdata/Script AddIns/OpusDevTools/resources/VScode layered with opus.png</instruction>
 			<instruction>OpusDT_GenerateIndex</instruction>
 		</function>
 	</button>
@@ -21,13 +23,15 @@
 		<label>Generate Minified &lt;kbd&gt;.d.ts&lt;/kbd&gt;</label>
 		<icon1>#otherplugins</icon1>
 		<function type="normal">
+			<instruction>@icon:/dopusdata/Script AddIns/OpusDevTools/resources/VScode layered with opus.png</instruction>
 			<instruction>OpusDT_GenerateMinifiedTypings</instruction>
 		</function>
 	</button>
 	<button backcol="none" display="both" textcol="none">
-		<label>Install Opus Dev Tools</label>
+		<label>Install/Update Opus Dev Tools</label>
 		<icon1>#otherplugins</icon1>
 		<function type="normal">
+			<instruction>@icon:/dopusdata/Script AddIns/OpusDevTools/resources/VScode layered with opus.png</instruction>
 			<instruction>OpusDT_Install</instruction>
 		</function>
 	</button>

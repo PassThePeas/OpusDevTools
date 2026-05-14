@@ -85,21 +85,3 @@ declare function GetOpusDT_Root(): string;
  */
 declare function GetOpusDT_RepoZipUrl(): string;
 
-
-/**
- * Git abstraction helpers (shared via include)
- */
-
-/**
- * Checks if a Git repository has a clean working directory.
- * @param path The absolute path to the local git repository.
- * @returns True if clean (no pending changes), false otherwise.
- */
-declare function GitCheckStatus(path: string | Path): boolean;
-
-/**
- * Performs a standard stage, commit, and push sequence.
- * @param path The absolute path to the local git repository.
- * @param message The commit message to use.
- */
-declare function GitCommitAndPush(path: string | Path, message: string): void;

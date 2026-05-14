@@ -63,6 +63,9 @@ declare global {
         AddColumn(): ScriptColumn;
     }
 
+    interface AddConfigPagesData {
+    }
+
     interface AfterFolderChangeData {
         /** Returns a string indicating the action that triggered the folder read. The string will be one of the following: *normal*, *refresh*, *refreshsearch*, *refreshsub*, *parent*, *root*, *back*, *forward*, *dblclk*.  
          * 
@@ -552,6 +555,11 @@ declare global {
         step: string;
     }
 
+    interface ConfigureScriptData {
+        /** This is a handle to the parent window that the script should use if displaying a dialog via the {@link Dialog} object. Even though this is not a {@link Lister} or {@link Tab}, it can still be assigned to the Dialog.window property to set the parent window of the dialog. */
+        window: number;
+    }
+
     interface Control {
         /** Set or query the color used for the background (fill) of this control. This is in the format `#RRGGBB` (hexadecimal) or `RRR,GGG,BBB` (decimal). Currently only static text, markup text, button and list view controls are supported for this property. */
         bg: string;
@@ -575,7 +583,7 @@ declare global {
         fg: string;
         /** Set or query the input focus state of the control. Returns True if the control currently has input focus, False if it doesn't. Set to True to give the control input focus. */
         focus: boolean;
-        /** *TO UPDATE once document is up to date* */
+        /** Returns the control's underlying window handle. Not directly usable in Opus but you may want this if interfacing with automation tools. */
         hwnd: number;
         /** For a button or static control set to image mode, this assigns an image to the control. You can either provide a filename (or internal icon name - e.g. `#about` for the internal about icon), or an {@link Image} object that you obtained from the {@link DOpus.LoadImage} or {@link Script.LoadImage} methods or an internal image (e.g. `%x`, where x is image index). */
         image: Image;
@@ -858,6 +866,8 @@ declare global {
         SetPosAndSize(x: number, y: number, cx: number, cy: number): void;
         /** Sets the size of this control. The cx (width) and cy (height) values are specified in pixels. */
         SetSize(cx: number, cy: number): void;
+        /** For edit controls set to use the code editor, this allows you to enable syntax highlighting. The *type* string can be "jscript", "vbscript" or "eval" to use one of the standard syntaxes. You can also specify your own custom syntax details. */
+        SetSyntax(type: string): void;
         /** Assigns a tooltip to this control, which will be shown when the mouse hovers over it. Pass an empty string to remove an existing tooltip. */
         SetTooltip(tip: string): void;
     }
@@ -1129,6 +1139,12 @@ declare global {
         x: number;
         /** Specifies the y-position of a script dialog. Use the position property to control how the position is interpreted. After the dialog has been displayed you can change this property to move the dialog around on-screen. */
         y: number;
+        /** Lets the user configure a dialog with a tab control which will be added to the standard script config dialog in a dedicated tab.
+         * 
+         * The **addConfigPagesData** parameter is the one that is passed to the OnAddConfigPages event method that is called when the user opens the config dialog. 
+         */
+        AddConfigPages(addConfigPagesData: AddConfigPagesData): void;
+
         /** Lets a script dialog register one or more custom messages that can then be sent to it from other scripts.  
          * 
          * Messages are registered by name. If a message is already registered the method will fail unless you set the optional force parameter to true. 
@@ -1137,10 +1153,12 @@ declare global {
         AddCustomMsg(name: string, force?: boolean): boolean;
         /** Creates a hotkey (or keyboard accelerator) for the specified key combination. When the user presses this key combination in your dialog, a **hotkey** event will be triggered. 
          * 
-         * The name parameter is a name you assign that lets you identify the hotkey. The key parameter specified the actual key combination; this can optionally combine the qualifiers **ctrl**, **shift** and **alt** with a character or name of a special key. For example, **ctrl+t** or **alt+shift+F7**. 
+         * The *name* parameter is a name you assign that lets you identify the hotkey. The *key* parameter specified the actual key combination; this can optionally combine the qualifiers **ctrl**, **shift** and **alt** with a character or name of a special key. For example, **ctrl+t** or **alt+shift+F7**. 
+         * 
+         * If the optional *global* parameter is set to true, the hotkey will be added as a global hotkey, and will work even when the dialog isn't active.
          * 
          * This method returns true if successful, or false on failure (e.g. if the hotkey already exists). */
-        AddHotkey(name: string, key: string): boolean;
+        AddHotkey(name: string, key: string, global?: boolean): boolean;
         /** If a dialog has auto-sizing controls that depend on the sizes of other controls, and you make changes to their sizes at runtime, you can call this method to force the dialog to recalculate all relative control sizes once you've made the required changes. */
         AutoSize(): void;
         /** Cancels monitoring of the system clipboard for changes previously established by a call to the **WatchClipboard** method. */
@@ -1235,7 +1253,7 @@ declare global {
          * 
          * The *id* string is a string that Opus can use to identify your dialog or the script it comes from. The template name of the dialog will be automatically appended to this. For example, you might specify *id* as *"kundal"* - Opus would then internally save the position of a dialog called *"dialog1"* as *"kundal!dialog1"*. Make sure you pick a string that other script authors are unlikely to use as Opus has no other way of telling the saved positions apart. 
          * 
-         * The optional type parameter lets you control which position elements are restored - specify *"pos"* to only restore the position, *"size"* to only restore the size, or *"pos,size"* to restore both (this is also the default, so you can also omit the argument all together). */
+         * The optional type parameter lets you control which position elements are restored - specify *"pos"* to only restore the position, *"size"* to only restore the size, or *"pos,size"* to restore both (this is also the default, so you can also omit the argument all together). Use *"fix"* or *"nofix"* to override the position_fix property.*/
         LoadPosition(id: string, type?: string): void;
         /** Displays a "Browse to Open File" dialog that lets the user select one or more files. The optional parameters are:
          * - *title* : specify title of the dialog,
@@ -1288,7 +1306,7 @@ declare global {
          * - *buttons* : specify button labels (in the same format as the buttons property described above)
          * - *title* : specify dialog window title
          * - *window* : specify parent window for the dialog (a {@link Lister} or a {@link Tab}). If not specified, the **Dialog** object's **window** property will be used.
-         * - *icon* : valid values are "w", "i", "q" or "e" for warning/info/question/error.
+         * - *icon* : displays a standard icon in the dialog. Valid values are "w", "i", "q" or "e" for warning/info/question/error.
          * 
          * The return value is the index of the button selected by the user, and this is also available in the result property once the method returns. The left-most button is index **1**, the next button is index **2**, and so on. If a dialog has more than one button then by definition the last (right-most) button is the "cancel" button and so this will return index **0**. */
         Request(message?: string, buttons?: string, title?: string, window?: Lister | Tab | Dialog | object, icon?: 'w' | 'i' | 'q' | 'e'): number;
@@ -1587,6 +1605,8 @@ declare global {
         DPI(): DPI;
         /** Forces Opus to write any configuration changes to disk immediately. */
         FlushConfig(): void;
+        /** Converts a JSON string to Opus objects like {@link Map|Maps} and {@link Vector|Vectors}. */
+        FromJson(json: string): any;
         /** Creates a new FSUtil object, that provides helper methods for accessing the file system. */
         FSUtil(): FSUtil;
         /** Retrieves the current contents of the system clipboard, if it contains either text or files. You can control the returned type by passing either "text" or "files" for the <type> argument - Opus will convert to the requested type if possible. If <type> is not specified the contents will be returned in their native format. */
@@ -1670,11 +1690,11 @@ declare global {
         /** Causes Opus to reload and reinitialize the specified script. You must provide the full pathname of the script on disk (if a script add-in wants to reload itself you can pass the value of the Script.file property). */
         ReloadScript(file: string): void;
         /** Displays a dialog with one or more buttons. The optional parameters are:
-         * - message - specify message string in the dialog   
-         * - buttons - specify button labels (in the same format as the buttons property described above)
-         * - title - specify dialog window title
-         * - window - specify parent window for the dialog (a Lister or a Tab). If not specified, the Dialog object's window property will be used.
-         * - *icon* : valid values are "w", "i", "q" or "e" for warning/info/question/error.
+         * - *message* - specify message string in the dialog   
+         * - *buttons* - specify button labels (in the same format as the buttons property described above)
+         * - *title* - specify dialog window title
+         * - *window - specify parent window for the dialog (a {@link Lister} or a {@link Tab}). If not specified, the Dialog object's window property will be used.
+         * - *icon* - displays a standard icon in the dialog. Valid values are "w", "i", "q" or "e" for warning/info/question/error.
          * 
          * The return value is the index of the button selected by the user, and this is also available in the result property once the method returns. The left-most button is index 1, the next button is index 2, and so on. If a dialog has more than one button then by definition the last (right-most) button is the "cancel" button and so this will return index 0. */
         Request(message?: string, buttons?: string, title?: string, window?: Lister | Tab | Dialog | object, icon?: 'w' | 'i' | 'q' | 'e'): number;
@@ -1697,6 +1717,8 @@ declare global {
         SetScheduledTimer(id: number, expirydate: date): boolean;
         /** For a script that implements the OnPeriodicTimer event, this creates a (or modifies an existing) timer that will call your method at regular intervals. The id argument specifies an integer ID that identifies the timer, and the interval specifies the timer interval in milliseconds. Use KillTimer to kill an established timer. */
         SetTimer(id: number, interval: number): boolean;
+        /** Converts an object to a JSON string. Supports Opus objects like like {@link Map|Maps} and {@link Vector|Vectors}. The optional *indent* argument lets you control the number of spaces each level of JSON is indented to. */
+        ToJson(object: any, indent?: number): string;
         /** Returns a Toolbars object which lets you enumerate all defined toolbars (whether they are currently open or not). You can restrict this object to only return in-use toolbars by specifying the optional type parameter - specify "listers" to only return toolbars currently turned on in a Lister, and "docks" to only return toolbars that are currently floating. */
         Toolbars(type: string): Toolbars;
         /** Returns a string indicating the type of an object or variable. */
@@ -2401,11 +2423,15 @@ declare global {
     }
 
     interface FlatViewChangeData {
-        /** Returns a string indicating the new Flat View mode. Will be one of off, grouped, mixed or mixednofolders. */
+        /** Returns a *string* indicating the new Flat View mode. Will be one of *off*, *grouped*, *mixed* or *mixednofolders*. */
         mode: string;
-        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  The string can contain any or all of the following: shift ctrl, alt, lwin, rwin  If no qualifiers were down, the string will be: none */
+        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*
+         * 
+         * If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
-        /** Returns a Tab object representing the tab the Flat View mode changed in. */
+        /** Returns a {@link Tab} object representing the tab the Flat View mode changed in. */
         tab: Tab;
     }
 
@@ -2420,9 +2446,9 @@ declare global {
         Next(): Item;
         /** Returns the next item in the enumeration. 
          * 
-         * By default (with no arguments provided) a single Item object is returned. For higher performance, you can specify a number as the first argument to return more than one item at once - in this case, a Vector of Item objects is returned instead. Specify -1 to return all items in the folder in one call. 
+         * By default (with no arguments provided) a single {@link Item} object is returned. For higher performance, you can specify a number as the first argument to return more than one item at once - in this case, a {@link Vector} of {@link Item} objects is returned instead. Specify -1 to return all items in the folder in one call. 
          * 
-         * You can also create your own Vector and pass it as the second argument to stop Opus creating a new Vector each time. */
+         * You can also create your own {@link Vector} and pass it as the second argument to stop Opus creating a new {@link Vector} each time. */
         Next(count: number, vector?: Vector): Vector<Item>;
     }
 
@@ -2464,37 +2490,37 @@ declare global {
         autosize: boolean;
         /** Returns True if checkbox mode is turned on, False if otherwise. */
         checkboxes: boolean;
-        /** Returns a collection of Column objects that represent all the individual columns currently added to the display. */
+        /** Returns a collection of {@link Column} objects that represent all the individual columns currently added to the display. */
         columns: Column[];
-        /** Returns a Vector of strings representing the explanation of the current folder format (the same text visible when hovering the mouse over the format lock icon in the status bar). */
+        /** Returns a {@link Vector} of strings representing the explanation of the current folder format (the same text visible when hovering the mouse over the format lock icon in the status bar). */
         format_explain: Vector<string>;
-        /** Returns a Path object which represents the path that the current folder format was set for (if any). */
+        /** Returns a {@link Path} object which represents the path that the current folder format was set for (if any). */
         format_path: path;
         /** Returns the number of frozen columns. Columns are always frozen from the left so this also tells you which columns are frozen (if any). */
         frozen: number;
-        /** Returns a string that indicates the state of the option to automatically calculate folder sizes. The string returned will be one of default, on or off. */
+        /** Returns a string that indicates the state of the option to automatically calculate folder sizes. The string returned will be one of *default*, *on* or *off*. */
         getsizes: string;
         /** If grouping is enabled, returns the name of the column that the list is grouped by. */
         group_by: string;
-        /** Returns a string indicating the current group combining mode. Possible values are normal, never and other. */
+        /** Returns a string indicating the current group combining mode. Possible values are **normal**, **never** and **other**. */
         group_combine: string;
-        /** Returns True if the group combining mode is set to Never combine. Note that this option is deprecated, you should use group_combine instead. */
+        /** Returns True if the group combining mode is set to **Never combine**. Note that this option is deprecated, you should use **group_combine** instead. */
         group_individual: boolean;
         /** Returns True if the groups are sorted in reverse order. */
         group_reverse: boolean;
-        /** Returns a FileAttr object indicating the file attributes that are hidden (any items with these attributes set will be hidden from the display). */
+        /** Returns a {@link FileAttr} object indicating the file attributes that are hidden (any items with these attributes set will be hidden from the display). */
         hide_attr: FileAttr;
         /** Returns the wildcard pattern of folders that are hidden from the display. */
         hide_dirs: string;
-        /** Returns True if the current hide_dirs pattern is using regular expressions. */
+        /** Returns True if the current **hide_dirs** pattern is using regular expressions. */
         hide_dirs_regex: boolean;
         /** Returns True if filename extensions are hidden, or False if they are displayed. */
         hide_ext: boolean;
         /** Returns the wildcard pattern of files that are hidden from the display. */
         hide_files: string;
-        /** Returns True if the current hide_files pattern is using regular expressions. */
+        /** Returns True if the current **hide_files** pattern is using regular expressions. */
         hide_files_regex: boolean;
-        /** Returns a FileAttr object indicating the folder attributes that are hidden (any folders with these attributes set will be hidden from the display). If the separate folder attribute filter is disabled this property will return the string "off". */
+        /** Returns a {@link FileAttr} object indicating the folder attributes that are hidden (any folders with these attributes set will be hidden from the display). If the separate folder attribute filter is disabled this property will return the string **"off"**. */
         hide_folder_attr: FileAttr | string;
         /** Returns the filename prefixes that are ignored when sorting the list. */
         ignore_prefix: string;
@@ -2504,9 +2530,9 @@ declare global {
         manual_sort: boolean;
         /** If manual sorting is active, returns the name of the current sort order (if it has one). */
         manual_sort_name: string;
-        /** If manual sort is active, returns a SortOrder object which lets you query and change the sort order. */
+        /** If manual sort is active, returns a {@link SortOrder} object which lets you query and change the sort order. */
         manual_sort_order: SortOrder;
-        /** Returns a string indicating the current file/folder mixing type. The string returned will be one of mixed, files (files first) or dirs (folders first). */
+        /** Returns a string indicating the current file/folder mixing type. The string returned will be one of *mixed*, *files* (files first) or *dirs* (folders first). */
         mix_type: string;
         /** Returns True if filenames and extensions are sorted separately. */
         name_ext: boolean;
@@ -2514,57 +2540,59 @@ declare global {
         numeric_name: boolean;
         /** Returns True if the over-all sort order is reversed. */
         reverse_sort: boolean;
-        /** Returns a FileAttr object indicating the file attributes that are shown (only items with these attributes set will be shown in the display). */
+        /** Returns a {@link FileAttr} object indicating the file attributes that are shown (only items with these attributes set will be shown in the display). */
         show_attr: FileAttr;
         /** Returns the wildcard pattern of folders that are shown (only folders matching this pattern will be shown). */
         show_dirs: string;
-        /** Returns True if the current show_dirs pattern is using regular expressions. */
+        /** Returns True if the current **show_dirs** pattern is using regular expressions. */
         show_dirs_regex: boolean;
         /** Returns the wildcard pattern of files that are shown. */
         show_files: string;
-        /** Returns True if the current show_files pattern is using regular expressions. */
+        /** Returns True if the current **show_files** pattern is using regular expressions. */
         show_files_regex: boolean;
-        /** Returns a FileAttr object indicating the folder attributes that are shown (only folders with these attributes set will be shown in the display). If the separate folder attribute filter is disabled this property will return the string "off". */
+        /** Returns a {@link FileAttr} object indicating the folder attributes that are shown (only folders with these attributes set will be shown in the display). If the separate folder attribute filter is disabled this property will return the string **"off"**. */
         show_folder_attr: FileAttr | string;
         /** Returns True if the name column is sorted by filename extension rather than filename. */
         sort_ext: boolean;
-        /** Returns a Column object representing the current sort field. */
+        /** Returns a {@link Column} object representing the current sort field. */
         sort_field: Column;
         /** Returns the custom thumbnail size, or 0 if no custom size is set. */
         thumb_size: number;
-        /** If the format overrides the global thumbnail stretch mode, returns one of FitReduce, FitSmooth, FitPixelated, FillCropSmooth, or FillCropPixelated. Otherwise, returns none. */
+        /** If the format overrides the global thumbnail stretch mode, returns one of *FitReduce*, *FitSmooth*, *FitPixelated*, *FillCropSmooth*, or *FillCropPixelated*. Otherwise, returns none. */
         thumb_stretch: string;
-        /** Returns the current view mode as a string. The returned string will be one of large_icons, small_icons, list, details, power, thumbnails or tile. */
+        /** Returns the current view mode as a string. The returned string will be one of *large_icons*, *small_icons*, *list*, *details*, *power*, *thumbnails* or *tile*. */
         view: string;
         /** Returns True if word sorting is enabled. */
         word_sort: boolean;
-        /** The first time a script accesses a particular Format object, a snapshot is taken of the tab's format. If the script then makes changes to that tab (e.g. it changes the sort field, etc), these changes will not be reflected by the object. To re-synchronize the object with the tab, call the Format.Update method. */
+        /** The first time a script accesses a particular Format object, a snapshot is taken of the tab's format. If the script then makes changes to that tab (e.g. it changes the sort field, etc), these changes will not be reflected by the object. To re-synchronize the object with the tab, call the **Format.Update** method. */
         Update(): void;
     }
 
     interface FSUtil {
-        /** Cancels folder or file change monitoring previously established by a call to the WatchChanges method. The id parameter is the ID you assigned to your watcher when it was created. */
+        /** Cancels folder or file change monitoring previously established by a call to the {@link WatchChanges} method. The **id** parameter is the ID you assigned to your watcher when it was created. */
         CancelWatchChanges(id: string): void;
         /** Compares the two provided path strings for equality - returns True if the two paths are equal, or False if otherwise.
          * 
-         * The optional flags parameter lets you modify the comparison behavior. This parameter is a string containing zero or more of the following letters (case sensitive):
+         * The optional **flags** parameter lets you modify the comparison behavior. This parameter is a string containing zero or more of the following letters (case sensitive):
          * - c : Makes the path comparison case sensitive.
          * - p : Returns True if path2 is equal to or a parent of path1.
          */
         ComparePath(path1: string, path2: string, flags: string): boolean;
-        /** Retrieves the display name of a path. This is the form of a path that is intended to be displayed to the user, rather than used internally by Opus. For example, for a library path it will strip off the internal ?xxxxxxx notation that Opus uses to identify library member folders. 
+        /** Retrieves the display name of a path. This is the form of a path that is intended to be displayed to the user, rather than used internally by Opus. For example, for a library path it will strip off the internal *?xxxxxxx* notation that Opus uses to identify library member folders. 
          * 
-         * The optional flags parameter lets you modify the behavior. This parameter is a string containing zero or more of the following letters (case sensitive):
+         * The optional **flags** parameter lets you modify the behavior. This parameter is a string containing zero or more of the following letters (case sensitive):
          * - e : for editing (returns a string designed for editing rather than for display)
          * - f : file part (returns the display filename rather than the entire path)
          * - r : resolve (resolves library paths to their underlying file system folder)
          */
         DisplayName(path: string, flags: string): string;
-        /** Returns a Vector of Drive objects, one for each drive on the system. */
+        /** Returns a {@link Vector} of {@link Drive} objects, one for each drive on the system. */
         Drives(): Vector<Drive>;
-        /** Returns True if the specified file, folder or device exists, or False otherwise. The optional flags parameter can be set to w to use wildcards in the final path component. */
+        /** Returns True if the specified file, folder or device exists, or False otherwise. 
+         * 
+         * The optional *flags* parameter can be set to **w** to use wildcards in the final path component. */
         Exists(path: string, flags?: string): boolean;
-        /** Returns a StringSet containing the names of any alternate data streams (ADS) found for the specified file or folder. */
+        /** Returns a {@link StringSet} containing the names of any alternate data streams (ADS) found for the specified file or folder. */
         GetADSNames(path: string): StringSet;
         /** Returns the localized text description for a system error code. */
         GetErrorMsg(error: number): string;
@@ -2579,9 +2607,9 @@ declare global {
          * - g : Go up to first existing parent
          */
         GetFolderPair(path: string, flags: string): PairedFolder;
-        /** Creates an Item object for the specified file path. */
+        /** Creates an {@link Item} object for the specified file path. */
         GetItem(path: string): Item;
-        /** Returns a Metadata object representing the metadata for the specified file. */
+        /** Returns a {@link Metadata} object representing the metadata for the specified file. */
         GetMetadata(path: string): Metadata;
         /** Returns the value of one or more shell properties for the specified file.
          * 
@@ -2589,32 +2617,32 @@ declare global {
          * 
          * The second parameter can be the name (or PKEY) of a property to retrieve, in which case the property value will be returned. 
          * 
-         * Alternatively, the second argument can be a Map object which lets you retrieve multiple properties at once. Each property you want to retrieve should be added to the Map with its name as a key, with an empty string as its value. The values in the Map will be replaced by the property values. 
+         * Alternatively, the second argument can be a {@link Map} object which lets you retrieve multiple properties at once. Each property you want to retrieve should be added to the {@link Map} with its name as a key, with an empty string as its value. The values in the **Map** will be replaced by the property values. 
          * 
-         * The optional type argument is a string that lets you control how the properties are looked up by name (not case-sensitive):
+         * The optional **type** argument is a string that lets you control how the properties are looked up by name (not case-sensitive):
          * - R : The first property whose raw name matches will be used.
          * - D : The first property whose display name matches will be used.
          * 
-         * If neither is specified, both raw and display names can match. Note that if a shell property is returned by the system as a SAFEARRAY type, it will be converted automatically to a Vector object.
+         * If neither is specified, both raw and display names can match. Note that if a shell property is returned by the system as a SAFEARRAY type, it will be converted automatically to a {@link Vector} object.
          */
         GetShellProperty(path: string, propertyorMap: string | DOpusMap<string>, type?: 'R' | 'D'): any;
-        /** Returns a Vector of ShellProperty objects which represents all the possible shell properties available on the system. 
+        /** Returns a {@link Vector} of {@link ShellProperty} objects which represents all the possible shell properties available on the system. 
          * 
-         * You can optionally provide a wildcard pattern as the first argument - if you do, only properties whose names match the supplied pattern will be returned.
+         * You can optionally provide a wildcard *pattern* as the first argument - if you do, only properties whose names match the supplied pattern will be returned.
          * 
-         *  The optional type argument is a string that lets you restrict the list of properties further (not case-sensitive):
+         *  The optional **type** argument is a string that lets you restrict the list of properties further (not case-sensitive):
          * - R : Property raw names must match the pattern.
          * - D : Property display names must match the pattern.
          * 
          * If neither is specified, both raw and display names can match.
          * 
-         *  Additional flags supported by the type argument are:
+         *  Additional flags supported by the **type** argument are:
          * - V : Restrict to viewable properties only. Viewable properties are those intended to be shown to the user - they're the same ones shown in Explorer's column chooser UI.
          */
         GetShellPropertyList(pattern: string, type: string): ShellProperty;
         /** For files signed with an Authenticode certificate (usually .exe and .dll files), returns a Signature object describing the signature used to sign the file with. 
          * 
-         * By default the signature won't be verified - the method will simply extract and return information about it. The optional verify parameter lets you verify the integrity of the file as well. Set this value to True to do a simple hash check (verifies the file has not been modified, but doesn't check the signature), or use the following flags to validate the signature as well as checking the file.
+         * By default the signature won't be verified - the method will simply extract and return information about it. The optional **verify** parameter lets you verify the integrity of the file as well. Set this value to True to do a simple hash check (verifies the file has not been modified, but doesn't check the signature), or use the following flags to validate the signature as well as checking the file.
          * - n : No revocation check
          * - c : (Lowercase c.) Check final certificate in the chain for revocation
          * - C : (Uppercase C.) Check the entire chain for revocation
@@ -2623,15 +2651,19 @@ declare global {
          * - l : Treat certificates as expired once their timestamp has elapsed
          */
         GetSignature(path: string, verifyOrFlags: boolean | string): Signature;
-        /** Creates a temporary folder (with a unique name) and returns the path to it in a Path object. Temporary folders created with this method have a limited lifetime after which Opus will automatically delete them (it will also clean them up when it's shutdown and restarted). The default lifetime is 20 minutes; you can change this using the optional parameter. */
+        /** Creates a temporary folder (with a unique name) and returns the path to it in a {@link Path} object. Temporary folders created with this method have a limited lifetime after which Opus will automatically delete them (it will also clean them up when it's shutdown and restarted). The default lifetime is 20 minutes; you can change this using the optional parameter. */
         GetTempDirPath(lifetime: number): Path;
-        /** Creates a temporary file and returns a File object ready to be written to.
+        /** Creates a temporary file and returns a {@link File} object ready to be written to.
          * 
-         * The returned object supports both reading and writing, without having to open the file a second time (although you can do that if it is easier). You can obtain the name of the file using the File.path property. An optional filename suffix can be specified; if not provided (or an empty string is passed), the default is ".tmp". 
+         * The returned object supports both reading and writing, without having to open the file a second time (although you can do that if it is easier). 
          * 
-         * An optional prefix can also be specified; if not provided (or an empty string is passed), the default is "dop". Between the suffix and prefix, Opus will insert additional characters into the name to ensure it is unique. 
+         * You can obtain the name of the file using the {@link File}.path property. 
          * 
-         * As an example, ```DOpus.FSUtil.GetTempFilePath(".txt","cat-")``` might generate ```C:\Users\Leo\AppData\Local\Temp\cat-202106230928470962.txt``` for a file path. 
+         * An optional filename **suffix** can be specified; if not provided (or an empty string is passed), the default is ".tmp". 
+         * 
+         * An optional **prefix** can also be specified; if not provided (or an empty string is passed), the default is "dop". Between the suffix and prefix, Opus will insert additional characters into the name to ensure it is unique. 
+         * 
+         * As an example, **```DOpus.FSUtil.GetTempFilePath(".txt","cat-")```** might generate *```C:\Users\Leo\AppData\Local\Temp\cat-202106230928470962.txt```* for a file path. 
          * 
          * The optional flags parameter can include zero or more of these letters (not case-sensitive):
          * - d : delete-on-close. File will be deleted automatically when closed.
@@ -2643,90 +2675,107 @@ declare global {
          * 
          * When delete-on-close is used, other things may not be able to open the file unless they specifically permit the file to be deleted at the time they open it. 
          * 
-         * The optional window parameter lets you associate the File object with a Tab or a Lister, which will be used if Opus needs to display any dialogs (e.g. a UAC elevation dialog).
+         * The optional **window** parameter lets you associate the **File** object with a {@link Tab} or a {@link Lister}, which will be used if Opus needs to display any dialogs (e.g. a UAC elevation dialog).
          */
         GetTempFile(suffix: string, prefix: string, flags: string, window: object): File;
-        /** Creates a temporary file (with a unique name) and returns the path to it in a Path object. 
+        /** Creates a temporary file (with a unique name) and returns the path to it in a {@link Path} object. 
          * 
-         * An optional filename suffix can be specified; if not provided (or an empty string is passed), the default is ".tmp". 
+         * An optional filename **suffix** can be specified; if not provided (or an empty string is passed), the default is ".tmp". 
          * 
-         * An optional prefix can also be specified; if not provided (or an empty string is passed), the default is "dop". 
+         * An optional **prefix** can also be specified; if not provided (or an empty string is passed), the default is "dop". 
          * 
          * Between the suffix and prefix, Opus will insert additional characters into the name to ensure it is unique. 
          * 
-         * As an example, ```DOpus.FSUtil.GetTempFilePath(".txt","cat-")``` might generate ```C:\Users\Leo\AppData\Local\Temp\cat-202106230928470962.txt``` for a file path.
+         * As an example, **```DOpus.FSUtil.GetTempFilePath(".txt","cat-")```** might generate *```C:\Users\Leo\AppData\Local\Temp\cat-202106230928470962.txt```* for a file path.
          */
         GetTempFilePath(suffix: string, prefix: string): Path;
         /** Returns a string indicating the item type of the specified file path. 
-         * The string will be either file, dir or invalid if the path doesn't exist.
+         * The string will be either **file**, **dir** or **invalid** if the path doesn't exist.
          * 
-         * The optional flags argument is used to control the behavior with archives. Normally, an archive will be reported as dir, but if you specify "a" for the flags parameter it will be reported as file. 
+         * The optional **flags** argument is used to control the behavior with archives. Normally, an archive will be reported as **dir**, but if you specify "**a**" for the flags parameter it will be reported as **file**. 
          * 
-         * This method is different to PathType which tells you the underlying "namespace" type rather than whether something is simply a file or a folder.
+         * This method is different to {@link PathType} which tells you the underlying "namespace" type rather than whether something is simply a file or a folder.
          */
         GetType(path: string, flags: string): string;
-        /** Calculates a checksum for the specified file or Blob.  
+        /** Calculates a checksum for the specified file or {@link Blob}.  
+         * By default, the MD5 hash is calculated, but you can use the optional **type** parameter to change the hash/checksum algorithm. Valid values are (not case-sensitive) **md5**, **blake3**, **sha1**, **sha256**, **sha512**, **crc32**, **crc32_php** and **crc32_php_rev**. 
          * 
-         * By default, the MD5 hash is calculated, but you can use the optional type parameter to change the hash/checksum algorithm. Valid values are (not case-sensitive) md5, blake3, sha1, sha256, sha512, crc32, crc32_php and crc32_php_rev. 
-         * 
-         * You can also specify multiple types (e.g. "md5,sha1,sha256") at once, in which case the specified checksums will be calculated at the same time, and the result will be returned as a Vector of strings (in the same order as you requested them). 
+         * You can also specify multiple types (e.g. *"md5,sha1,sha256"*) at once, in which case the specified checksums will be calculated at the same time, and the result will be returned as a {@link Vector} of strings (in the same order as you requested them). 
          * 
          * Unlike the other algorithms, CRC32 is a concept rather than a well-defined standard. We have provided the three CRC32 implementations you're most likely to encounter:
-         * - CRC32 is most common in the Windows world and matches what tools like 7-Zip and PKZip call "CRC32", and what PHP calls "CRC32b".
-         * - CRC32_PHP is less common and matches what BZIP2 uses and what PHP outputs by default.
-         * - CRC32_PHP_REV is the same as CRC32_PHP but with the result's byte-order reversed, as output by some tools.
+         * - *CRC32* is most common in the Windows world and matches what tools like 7-Zip and PKZip call "CRC32", and what PHP calls "CRC32b".
+         * - *CRC32_PHP* is less common and matches what BZIP2 uses and what PHP outputs by default.
+         * - *CRC32_PHP_REV* is the same as *CRC32_PHP* but with the result's byte-order reversed, as output by some tools.
          * 
          * Example (VBScript):   ```DOpus.FSUtil.Hash("C:\Windows\Notepad.exe","md5")```
          * 
-         * The optional third argument allows you to calculate the hash asynchronously and return its result to a script dialog's message loop. To use this, pass your Dialog object as the third argument. The Hash method will then return a unique ID number for the request, and your message loop will receive a "hash" message when the result is ready. The Msg.data property provides the request ID and the Msg.object property provides the hash (which will either be a string, or a Vector if more than one hash type was requested).
+         * The optional third argument allows you to calculate the hash asynchronously and return its result to a script dialog's message loop. To use this, pass your {@link Dialog} object as the third argument. The **`Hash`** method will then return a unique ID number for the request, and your message loop will receive a "hash" message when the result is ready. The {@link Msg.data} property provides the request ID and the {@link Msg.object} property provides the hash (which will either be a string, or a Vector if more than one hash type was requested).
          */
-        Hash(pathor: string, Blob: object, type: string, arg3: Dialog): Vector;
-        /** Creates a new FileAttr object, which represents file attributes. You can initialize the new object by passing either a string representing the attributes to turn on (e.g. "hsr") or another FileAttr object. If you don't pass a value, the new object will default to all attributes turned off. */
-        NewFileAttr(fileAttributes: string | FileAttr): FileAttr;
-        /** Creates a new FileSize object, which makes it easier to handle 64 bit file sizes. 
+        Hash(pathOrBlob: string | Blob, type: string, dlg?: Dialog): string | Vector<string>;
+        /** Creates a new {@link FileAttr} object, which represents file attributes. 
          * 
-         * You can initialize this with a number of data types (int, string, decimal, currency, another FileSize object, or a Blob containing exactly 1, 2, 4 or 8 bytes). You can use a hexadecimal string by pre-pending $ or 0x. 
+         * You can initialize the new object by passing either a string representing the attributes to turn on (e.g. *"hsr"*) or another {@link FileAttr} object. If you don't pass a value, the new object will default to all attributes turned off. */
+        NewFileAttr(fileAttributes: string | FileAttr): FileAttr;
+        /** Creates a new {@link FileSize} object, which makes it easier to handle 64 bit file sizes. 
+         * 
+         * You can initialize this with a number of data types (*int*, *string*, *decimal*, *currency*, another {@link FileSize} object, or a {@link Blob} containing exactly 1, 2, 4 or 8 bytes). You can use a hexadecimal string by pre-pending **$** or **0x**. 
          * 
          * Example (VBScript):   ```DOpus.FSUtil.NewFileSize(1024)```
          * 
          * When only a size is specified, the result will be an unsigned value, which means it can represent larger size values but cannot represent negative values. 
          * 
-         * To create a signed value instead, specify "s" as the first parameter and specify the size as the second parameter. This is case-sensitive; it must be a lowercase "s". 
+         * To create a signed value instead, specify "**s**" as the first parameter and specify the size as the second parameter. This is case-sensitive; it must be a lowercase "s". 
          * 
          * Example (VBScript):   ```DOpus.FSUtil.NewFileSize("s", -1024)```
          */
         NewFileSize(size: number | string | decimal | FileSize | Blob, signedSize?: number): FileSize;
-        /** Creates a new Path object initialised to the provided path string. */
+        /** Creates a new {@link Path} object initialised to the provided path string. */
         NewPath(path: string): Path;
-        /** Creates a new Wild object. If a pattern and flags are provided, the pattern will be parsed automatically; otherwise, you must call the Parse method on the returned object before using it. See the description of the Wild.Parse method for a list of the valid flags. */
+        /** Creates a new {@link Wild} object. 
+         * 
+         * If a **pattern** and **flags** are provided, the pattern will be parsed automatically; otherwise, you must call the **Parse** method on the returned object before using it. 
+         * 
+         * See the description of the {@link Wild.Parse} method for a list of the valid flags. */
         NewWild(pattern: string, flags: string): Wild;
-        /** Opens or creates a file and returns a File object that lets you access its contents as binary data. A File object is always returned, even if the file could not be opened. Check File.error on the returned object immediately after creating it to see if opening the file succeeded. Even if a file was not be opened, some of the returned object's methods may still work. For example, if a file exists but permissions block you from opening it, you may still be able to change its attributes, or vice versa. 
+        /** Opens or creates a file and returns a {@link File} object that lets you access its contents as binary data. 
+         * A **File** object is always returned, even if the file could not be opened. Check **File.error** on the returned object immediately after creating it to see if opening the file succeeded. 
+         * Even if a file was not be opened, some of the returned object's methods may still work. For example, if a file exists but permissions block you from opening it, you may still be able to change its attributes, or vice versa. 
+         * 
          * The first argument can be either:
-         * - A string ot Path object which specifies the file to open
-         * - An existing Blob object to create a File object that gives you read/write stream access to a chunk of memory.
-         * When opening a Blob, the created object will always be in read-write mode and the rest of the parameters (mode and window/elevation) are not used and need not be specified. 
-         * When opening a file, the optional mode parameter specifies how to open it (case sensitive):
-         * - r  > Read mode. The file can be read but not written. (This is the default.)
-         * - w  > Write mode. The file can be written, but not read.
-         * - rw > Read-write mode. The file can be read and written from the same object. 
-         * When opening in write mode or read-write mode, you can specify additional mode flags that control how the file is created or opened (case sensitive):
+         * - A string or {@link Path} object which specifies the file to open
+         * - An existing {@link Blob} object to create a {@link File} object that gives you read/write stream access to a chunk of memory.
+         * 
+         * When opening a {@link Blob}, the created object will always be in *read-write mode* and the rest of the parameters (**mode** and **window/elevation**) are not used and need not be specified.
+         *  
+         * When opening a file, the optional **mode** parameter specifies how to open it (case sensitive):
+         * - r  > *Read mode*. The file can be read but not written. (This is the default.)
+         * - w  > *Write mode*. The file can be written, but not read.
+         * - rw > *Read-write mode*. The file can be read and written from the same object. 
+         * 
+         * When opening in *write mode* or *read-write mode*, you can specify additional **mode** flags that control how the file is created or opened (case sensitive):
          * - c > Create a new file, only if it doesn't already exist. The call will fail if the file already exists.
          * - a > Create a new file, always. If the file already exists, it will be overwritten, i.e. truncated to zero length. (This is the default if w or rw are used on their own.)
          * - e > Open existing file. The call will fail if the file does not already exist.
          * - o > Open existing file. The file will be created if it does not exist.
          * - t > Truncate existing file. If the file exists, it will be truncated to zero length. If the file doesn't exist, the call will fail.
-         * The mode flags can also include these letters (case sensitive):
+         * 
+         * The **mode** flags can also include these letters (case sensitive):
          * - d > Delete-on-close. The file will be automatically deleted when closed. (If something else also has the file open, it won't be deleted until everything closes it.)
-         * - f > Force. Opus will clear the file's read-only attribute if it blocks opening the file for writing; otherwise, attempting to open a read-only file for writing will fail. For example, "wof" is like "wo" mode but also clears the read-only attribute.
-         * - m > Modify mode. Use this if you want to use the File object to read or modify the file's attributes, or get the file's size, without reading or writing the actual file contents.
+         * - f > Force. Opus will clear the file's read-only attribute if it blocks opening the file for writing; otherwise, attempting to open a read-only file for writing will fail. For example, "**wof**" is like "**wo**" mode but also clears the read-only attribute.
+         * - m > Modify mode. Use this if you want to use the **File** object to read or modify the file's attributes, or get the file's size, without reading or writing the actual file contents.
          * - p > Permit deletion. Other processes can delete the file before it has been closed, although any deletion will not take place until it is closed. Files opened via this method always permit other readers and writers.
          * - x > (Lowercase x.) Exclude other readers. While you have the file open, nothing else can open it for reading. If something else already has it open for reading, your request to open the file will fail. Has no effect on filesystems that don't support it.
          * - X > (Uppercase X.) Exclude other writers. While you have the file open, nothing else can open it for writing. If something else already has it open for writing, your request to open the file will fail. Has no effect on filesystems that don't support it.
-         * When opening an existing file which something else already flagged for deletion, including files already open in delete-on-close mode, the p (permit deletion) flag must be specified. Non-Windows filesystems may have different locking and sharing rules. Opus will pass the requested flags to them, but it is ultimately up to them how they behave. 
-         * The optional third parameter takes either a window object or a string indicating elevation mode. This parameter influences the behavior of UAC elevation prompts (and potentially other user interface elements) that may be triggered when opening the file. It can be one of the following:
-         * - An Opus Tab or Lister object which UAC prompts will appear over if elevation is required and has not already been obtained.
-         * - The string "NoElevate" to prevent UAC elevation entirely when opening this file.
-         * - The string "ElevateNoAsk" to prevent UAC prompts while still gaining elevation if something else already got it (e.g. a previous OpenFile call).
+         * 
+         * When opening an existing file which something else already flagged for deletion, including files already open in *delete-on-close mode*, the **p** (permit deletion) flag must be specified.
+         * 
+         * Non-Windows filesystems may have different locking and sharing rules. Opus will pass the requested flags to them, but it is ultimately up to them how they behave. 
+         * 
+         * The optional third parameter takes either a **window** object or a string indicating **elevation** mode. This parameter influences the behavior of UAC elevation prompts (and potentially other user interface elements) that may be triggered when opening the file. It can be one of the following:
+         * - An Opus {@link Tab} or {@link Lister} object which UAC prompts will appear over if elevation is required and has not already been obtained.
+         * - The string "**NoElevate**" to prevent UAC elevation entirely when opening this file.
+         * - The string "**ElevateNoAsk**" to prevent UAC prompts while still gaining elevation if something else already got it (e.g. a previous **OpenFile** call).
+         * 
          * Example (VBScript): ```Set F = DOpus.FSUtil.OpenFile("C:\Test.txt","wrcf","NoElevate")```
          */
         OpenFile(pathorobject: string | Path, mode: string, windoworstring?: object): File;
@@ -2740,13 +2789,15 @@ declare global {
          * - coll : The path is a collection
          * - plugin : The path is a plugin-provided namespace, most probably an archive (but not Zip)
          * 
-         * This method is different to GetType which tells you whether something is a file or a directory.
+         * This method is different to **GetType** which tells you whether something is a file or a directory.
          */
         PathType(path: string): string;
-        /** Returns a FolderEnum object that lets you enumerate the contents of the specified folder. The optional flags string can include zero or more flag characters (not case-sensitive):
+        /** Returns a {@link FolderEnum} object that lets you enumerate the contents of the specified folder. 
+         * 
+         * The optional **flags** string can include zero or more flag characters (not case-sensitive):
          * - r : Recursively enumerate the folder, listing the contents of the folder, its sub-folders, their sub-folders, and so on.
          * - l : Skip links. Prevents the traversal of symbolic links and junctions when recursively enumerating folders.
-         * - s : Shell enumeration. Ask's the Windows Shell to enumerate non-filesystem folders. For example, the Quick Access folder on Windows 10 could be enumerated with ReadDir("/quickaccess","s"); it would not work without the "s" because Quick Access is not a real filesystem directory.
+         * - s : Shell enumeration. Asks the Windows Shell to enumerate non-filesystem folders. For example, the Quick Access folder on Windows 10 could be enumerated with **`ReadDir("/quickaccess","s");`** it would not work without the "s" because Quick Access is not a real filesystem directory.
          * - p : Suppress password dialogs from encrypted archives.
          * 
          * If you don't need any flags, skip the second argument entirely. You may see older scripts pass True and False as the second argument, to turn recursion on and off; that is deprecated but remains supported for compatibility.
@@ -2754,64 +2805,71 @@ declare global {
         ReadDir(path: string, flags?: string): FolderEnum;
         /** Resolves the specified path string to its real filesystem path, with support for converting:
          * - Folder Aliases to the real paths they point to.
-         * - Library and File Collection items to their real filesystem paths.
-         * - Application paths in the {apppath|appname} form.
+         * - **Library** and **File Collection** items to their real filesystem paths.
+         * - Application paths in the **{apppath|appname}** form.
          * - Environment variables.
-         * - Optionally, junctions and symbolic links can be resolved to their targets.
+         * - Optionally, **junctions** and **symbolic links** can be resolved to their targets.
          * 
          * It is safe to pass a path which does not need resolving; the path will be returned unmodified, so you can call this on things without checking if it is needed first. 
          * 
-         * Scripts which pass the current directory to external software should generally call Resolve on the path first, otherwise they risk passing aliases like /desktop to things which won't understand them.
+         * Scripts which pass the current directory to external software should generally call Resolve on the path first, otherwise they risk passing aliases like *\/desktop* to things which won't understand them.
          * 
-         * The optional flags string can include the following letter (not case-sensitive):
+         * The optional **flags** string can include the following letter (not case-sensitive):
          * - c : Return canonical paths. This will expand short filenames to their true long filename representation.
          * - j : Resolve junctions and symbolic links to their target folder.
          * - a : Resolve path to alias (if possible).
-         * Note that Path objects also have a similar Resolve method which modifies them in-place. */
+         * 
+         * Note that {@link Path} objects also have a similar **Resolve** method which modifies them in-place. */
         Resolve(path: string, flags?: string): Path;
         /** Allows you to run external programs and optionally capture their output.
          * 
-         * cmdline is the full command line, including any required arguments. Any paths containing spaces must be quoted. 
+         * **cmdline** is the full command line, including any required arguments. Any paths containing spaces must be quoted. 
          * 
-         * show is the show state of (usually) the first window opened by the program. Use 0 to hide it, 1 to show it normally, 2 for minimize, 3 for maximize. 
+         * **show** is the show state of (usually) the first window opened by the program. Use `0` to hide it, `1` to show it normally, `2` for minimize, `3` for maximize. 
          * 
-         * The possible values for the optional flags argument are:
+         * The possible values for the optional **flags** argument are:
+         * - a : Launch the progrom as administrator (elevated).
          * - r : Redirect output. The program's stdout will be redirected and returned to your script.
-         * - w : Wait for completion. The Run method won't return until the program exits. Note that the r flag implies w (you can't capture output without waiting for the program to finish).
+         * - w : Wait for completion. The **Run** method won't return until the program exits. Note that the r flag implies w (you can't capture output without waiting for the program to finish).
          * 
-         * The optional input argument is any text to send to the command's stdin when it runs.
+         * Note that the r flag implies w (you can't capture output without waiting for the program to finish).
          * 
-         * The optional curdir argument lets you specify the current directory for the launched process. If not told to wait for results, this method returns true or false.
+         * The optional **input** argument is any text to send to the command's stdin when it runs.
          * 
+         * The optional **curdir** argument lets you specify the current directory for the launched process. 
+         * 
+         * The optional **encode** argument lets you specify the encoding any captured output should be interpreted as. If not specified, UTF-8 is the default. Specify `0` for the current system codepage. You can also specify `"raw"` to receive the output as a {@link Blob} object and then convert it yourself using the {@link StringTools} methods.
+         * 
+         * If not told to wait for results, this method returns true or false.
          * If waiting for results, returns false on failure, or a RunResults object on success.
          */
         Run(cmdline: string, show: number, flags?: string, input?: string, curdir?: string, encode?:string): boolean | RunResults;
         /** Allows you to run external programs and optionally capture their output. 
          * 
-         * Instead of six separate arguments, this method also supports receiving its arguments via a Map object. 
+         * Instead of six separate arguments, this method also supports receiving its arguments via a {@link Map} object. 
          * 
          * The parameters can be provided as values of the Map, with the following names: "command", "showcmd", "flags", "input", "cd" and "codepage".
          */
         Run(args: DOpusMap<any>): boolean | RunResults;
         /** Returns True if the two specified paths both refer to the same drive or partition.
          * 
-         * The optional flags string can contain zero or more of the following letters (case sensitive):
-         * - c : Consider the CD burning staging area the same as the CD (or other writable optical media) itself.
-         * - m : Handle NTFS mount points. (Slower but more accurate if either path may be below a mount point which really points to a different drive.)
+         * The optional **flags** string can contain zero or more of the following letters (case sensitive):
+         * - c : Consider the **CD burning staging area** the same as the CD (or other writable optical media) itself.
+         * - m : Handle **NTFS mount points**. (Slower but more accurate if either path may be below a mount point which really points to a different drive.)
          * - r : Real paths only. (Skip extra processing that is only useful for things like FTP sites and MTP devices.)
-         * - s : Test if paths point to the same drive via drive letters created by the Windows subst command.
-         * - u : Compare FTP users. (By default, FTP paths are considered the "same drive" if they point to the same FTP site. The u flag adds the requirement that both paths have the same user name.)
-         * - z : If path1 is inside a Zip file or other archive, only consider path2 on the "same drive" if it is the archive itself or is inside the same archive.
-         * - Z : If path1 is inside a Zip file or other archive, only consider path2 on the "same drive" if it is inside the same archive.
+         * - s : Test if paths point to the same drive via drive letters created by the Windows **subst** command.
+         * - u : Compare **FTP users**. (By default, FTP paths are considered the "same drive" if they point to the same FTP site. The **u** flag adds the requirement that both paths have the same user name.)
+         * - z : If **path1** is inside a Zip file or other archive, only consider **path2** on the "same drive" if it is the archive itself or is *inside* the same archive.
+         * - Z : If **path1** is inside a Zip file or other archive, only consider **path2** on the "same drive" if it is *inside* the same archive.
          * 
-         * When neither z nor Z are specified, archives are essentially treated like normal directories and will be considered on the "same drive" as any path pointing to the same drive the archive is on, including other archive paths on that drive.
+         * When neither **z** nor **Z** are specified, archives are essentially treated like normal directories and will be considered on the "same drive" as any path pointing to the same drive the archive is on, including other archive paths on that drive.
          */
         SameDrive(path1: string, path2: string, flags: string): boolean;
-        /** Establish monitoring of a folder or file for changes. Returns 0 for success or an error code on failure.
+        /** Establish monitoring of a folder or file for changes. Returns **0** for success or an error code on failure.
          * 
-         * When a change occurs to a monitored file or folder, the script's OnFilesystemChange event is triggered.
+         * When a change occurs to a monitored file or folder, the script's {@link OpusOnFilesystemChange|OnFilesystemChange} event is triggered.
          * 
-         * The id argument lets you provide an ID for this watcher that's used to identify it when changes occur. dir is the full path to a filesystem folder, or a file if the i flag is set. 
+         * The **id** argument lets you provide an ID for this watcher that's used to identify it when changes occur. **dir** is the full path to a filesystem folder, or a file if the **i** flag is set. 
          * 
          * The optional flags are:
          * - f : monitor for file change in folder (e.g. file created or deleted)
@@ -2822,7 +2880,7 @@ declare global {
          * - w : monitor for last write time changes
          * - i : monitor a single file rather than a folder
          * 
-         * Use the CancelWatchChanges method to cancel monitoring.
+         * Use the {@link CancelWatchChanges} method to cancel monitoring.
          */
         WatchChanges(id: string, path: string, flags: string): number;
     }
@@ -2978,7 +3036,7 @@ declare global {
          * 
          * By default HTTP action will be chosen automatically based on the state of the object - `POST` if `AddPostData` has been used, otherwise `GET`. You can override this with the optional action parameter if you like - e.g. specify `HEAD` to just retrieve the headers without any response data. 
          * 
-         * To use unix sockets (Win 10 and above), use http+unix:// as the protocol followed by the path to the .sock file. Note that OS limitations mean the socket file path can't use unicode characters (ASCII only) and can't be longer than 107 characters.
+         * This function also supports local Unix sockets (on Windows 10 and above). Use `http+unix://` as the protocol followed by the path to the .sock file. Note that OS limitations mean the socket file path can't use unicode characters (ASCII only) and can't be longer than 107 characters.
          */
         SendRequest(url: string, action?: string): void;
         /** Specifies a timeout in seconds (default is 30). Functions which block like ReadResponse will timeout if a complete response is not received in time. Set to 0 for no timeout. */
@@ -3108,6 +3166,8 @@ declare global {
         nested: boolean;
         /** Returns the path of the item's parent folder. This does not include the name of the item itself, which can be obtained via the name property. */
         path: Path;
+        /** For stored query collections, returns a {@link StoredQuery} object that lets you read and modify the query's properties. */
+        query: StoredQuery;
         /** Returns the "real" path of the item. For items located in virtual folders like Libraries or Collections, this lets you access the item's underlying path in the real file system. The realpath property includes the full path to the item, including its own name. */
         realpath: Path;
         /** Returns True if the item was selected, or False otherwise. */
@@ -4476,6 +4536,23 @@ declare global {
 
     interface StartupData { }
 
+    interface StoredQuery {
+        /** True if the query auto-updates when it's read, false if it has to be manually refreshed. */
+        autoupdate: boolean;
+        /** Search engine the query uses. As well as the engine itself, any options it offers can also be controlled. For example, "everything,case" would use Everything in case sensitive mode.
+         * 
+         * - everything :	case, wholeword, matchpath, regex, diacritics
+         * - everythingglobal :	case, wholeword, matchpath, regex, diacritics
+         * - windows :	nqs, noauto
+         * - opus :	nonames, content, nowild, regex, anywords
+         */
+        engine: string;
+        /** A {@link Vector} of paths that the query runs against. */
+        paths: Vector<Path|string>;
+        /** The query string */
+        query: string;
+    }
+
     interface StringSet {
         /** Returns the number of elements the StringSet currently holds. */
         count: number;
@@ -5530,112 +5607,292 @@ declare global {
 
     // --- SIGNATURES DES ÉVÉNEMENTS (EXTRACTION STRICTE DU JSON) ---
 
-    /** Your event method will be called whenever the script is about to display its About dialog. */
+    /** The OnAboutScript event can be implemented by a script add-in to display an "about" dialog to the user. It is triggered when the user clicks the *About* button for a script on the Script Management dialog.
+     * 
+     * The usual implementation for this event would use the {@link AboutData.window} parameter to display a dialog using the {@link Dialog} object.
+     */
     type OpusOnAboutScript = (aboutData: AboutData) => void;
 
-    /** The ActivateListerData.active property is True if the Lister is being activated, and False if it is being deactivated. */
+    /** The OnActivateLister event can be implemented by a script add-in to receive notification whenever a Lister window becomes the active window, or loses activation to another window.
+     * 
+     * The {@link ActivateListerData.lister} property identifies the Lister, and the **active** property indicates whether this Lister has become active or inactive. If the activation moves from one Lister to another this event would be called twice, once for each Lister. 
+     */
     type OpusOnActivateLister = (activateListerData: ActivateListerData) => void;
 
-    /** The ActivateTabData.tab property identifies the tab that was activated. */
+    /** The OnActivateTab event can be implemented by a script add-in to receive a notification every time a tab becomes active (i.e. comes to the front of another tab in the same file display).
+     * 
+     * The {@link ActivateTabData.oldtab} property identifies the tab that was previously active, and the **newtab** property identifies the new active tab.
+     */
     type OpusOnActivateTab = (activateTabData: ActivateTabData) => void;
 
-    /** The OnAddButtons event can be implemented by a script add-in to add dynamic buttons to toolbars and menus. Scripts do this by adding new internal commands to Opus, specifying one or more arguments that are used to generate dynamic buttons.*/
-    type OpusOnAddButtons = (addButtonsData : AddButtonsData) => void | boolean;
+    /** The OnAddButtons event can be implemented by a script add-in to add dynamic buttons to toolbars and menus. Scripts do this by adding new internal commands to Opus, specifying one or more arguments that are used to generate dynamic buttons.
+     * 
+     * For example, a function called `Foo` might have an argument `BAR` that's used to generate a number of buttons. When the user adds a toolbar button with the command `Foo BAR`, your script's **OnAddButtons** event would be called to generate dynamic buttons that are shown on the toolbar. Any buttons it creates will be displayed in place of the original button, and the original button will be hidden (except in Customize mode).
+     * 
+     * The arguments that generate dynamic buttons are specified when adding the custom command via the `dynamic_args` property of the {@link ScriptCommand} object.
+     */
+    type OpusOnAddButtons = (addButtonsData : AddButtonsData) => void;
 
-    /** The AddColData.column property provides a Column object you can use to add your custom columns. */
+    /** The OnAddColumns event is called to allow your script add-in to add columns. Call the {@link AddColData.AddColumn} method once for each column you wish to add.
+     * 
+     * When Opus starts up, or when a script add-in is added, edited or enabled, its **OnAddColumns** method is called. This allows a script to add columns to Opus. A script can reinitialize its list of columns at any time by calling the {@link Script.InitColumns} method.
+     */
     type OpusOnAddColumns = (addColData: AddColData) => void;
 
-    /** The AddCmdData.command property provides a Command object you can use to add your custom commands. */
+    /** The OnAddCommands event is called to allow your script add-in to add internal commands. Call the {@link AddCmdData.AddCommand} method once for each command you wish to add.
+     * 
+     * When Opus starts up, or when a script add-in is added, edited or enabled, its **OnAddCommands** method is called. This allows a script to add internal commands to the Opus command set. A script can reinitialize its list of commands at any time by calling the {@link Script.InitCommands} method.
+     */
     type OpusOnAddCommands = (addCmdData: AddCmdData) => void;
 
-    /** The AfterFolderChangeData.result property is True if the folder was read successfully, and False otherwise. */
-    type OpusOnAfterFolderChange = (afterFolderChangeData: AfterFolderChangeData) => boolean | void;
+    /** The OnAddConfigPages event can be implemented by a script add-in to add custom configuration pages to the script configuration dialog. The **addConfigPagesData** parameter needs to be provided to the DialogAddConfigPages method called from this event. */
+    type OpusOnAddConfigPages = (addConfigPagesData: AddConfigPagesData) => void;
 
-    /** The BeforeFolderChangeData.path property identifies the folder that is being changed to. You can return True from this event to prevent the folder change, or a string (representing a new path) to redirect the change to a different folder. */
-    type OpusOnBeforeFolderChange = (beforeFolderChangeData: BeforeFolderChangeData) => boolean | string | void;
+    /** The OnAfterFolderChange event can be implemented by a script add-in that wants to be notified after a new folder has been read in a tab. Use the {@link OpusOnBeforeFolderChange|OnBeforeFolderChange} event to receive notification *before* the folder is read.
+     * 
+     * The {@link AfterFolderChangeData.tab} property indicates the tab and the path property the **path** of the folder. The **result** property indicates the success or failure of the folder read.
+     * 
+     * If **result** is False (i.e. the folder was not successfully read) then you can return True from this event to stop Opus from going back to the previous folder (which is what normally happens when a folder read fails). If **result** is True then the return value from this event is ignored.
+     */
+    type OpusOnAfterFolderChange = (afterFolderChangeData: AfterFolderChangeData) => boolean;
 
-    /** The BeginDragData.lister property identifies the Lister the drag is originating from. You can return False from this event to prevent the drag from starting. */
-    type OpusOnBeginDrag = (beginDragData: BeginDragData) => boolean | void;
+    /** The OnBeforeFolderChange event can be implemented by a script add-in to receive notification before a new folder is read in a tab. Use the {@link OpusOnAfterFolderChange|OnAfterFolderChange} event if you want notification *after* a folder has been read.
+     * 
+     * The {@link BeforeFolderChangeData.tab} property identifies the tab, and the **path** property identifies the folder about to be read. The **initial** property indicates if this is the first folder read into this tab - if True, it means the tab was previously empty or newly opened.
+     * 
+     * You can return two different types from this event:
+     * - bool: If you return True, the folder read will be blocked and the tab will be unchanged. If you return False the read will be allowed to continue (this is the default).
+     * - string: You can return a string (or a {@link Path} object) to change the folder path to be read.
+     */
+    type OpusOnBeforeFolderChange = (beforeFolderChangeData: BeforeFolderChangeData) => boolean | string | Path | void;
 
-    /** Your event method will be called whenever the clipboard contents change. */
+    /** The **OnButtonContext** event can be implemented by a script add-in that adds one or more new this by adding new internal commands to Opus. Individual command arguments can be flagged as needing context-sensitive state.
+     * 
+     * For example, a function called `Foo` might have an argument `BAR` that should appear highlighted in certain situations. When the user adds the command `Foo BAR` to a toolbar, your script's **OnButtonContext** event is called to update the button's state.
+     * 
+     * The arguments that require context-sensitive state are specified when adding the custom command via the `context_args` property of the {@link ScriptCommand} object.
+     */
+    type OpusOnButtonContext = (buttonContextData: ButtonContextData) => void;
+
+    /** The OnClipboardChange event can be implemented by a script add-in to receive notification whenever the contents of the system clipboard change. */
     type OpusOnClipboardChange = (clipboardChangeData: ClipboardChangeData) => void;
 
-    /** The CloseListerData.lister property identifies the Lister that is closing. */
-    type OpusOnCloseLister = (closeListerData: CloseListerData) => void;
+    /** The OnCloseLister event can be implemented by a script add-in to receive notification whenever a Lister is closed. */
+    type OpusOnCloseLister = (closeListerData: CloseListerData) => boolean;
 
-    /** This event is called when your script is being shut down. */
-    type OpusOnClosePlugins = (closePluginsData: ClosePluginsData) => void;
+    /** The OnCloseTab event can be implemented by a script add-in to receive notification when a tab is closed in a Lister.
+     * 
+     * The {@link CloseTabData.tab} property identifies the tab that is closing. You can return True from this event to prevent the tab from closing, or False (which is the default) to allow it to close.
+     * 
+     * Note that when a Lister closes this event is **not** triggered for each of its tabs - the {@link OpusOnCloseLister|OnCloseLister} event provides notification when a Lister closes, and all the tabs in that Lister as discoverable through the {@link CloseListerData.lister}.**tabs** property.
+     */
+    type OpusOnCloseTab = (closeTabData: CloseTabData) => boolean;
 
-    /** The CloseTabData.tab property identifies the tab that is closing. You can return True from this event to prevent the tab from closing. */
-    type OpusOnCloseTab = (closeTabData: CloseTabData) => boolean | void;
+    /** The OnConfigBackup event can be implemented by a script add-in to receive notification when the Opus configuration is being backed up. */
+    type OpusOnConfigBackup = (configBackupData: ConfigBackupData) => void;
 
-    /** This event is called when a global configuration setting is changed. */
-    type OpusOnConfigChange = (configChangeData: ConfigChangeData) => void;
+    /** The OnConfigRestore event can be implemented by a script add-in to receive notification when the Opus configuration is being restored from a backup. */
+    type OpusOnConfigRestore = (configRestoreData: ConfigRestoreData) => void;
 
-    /** The DisplayModeChangeData.mode property identifies the new display mode. */
+    /** The OnConfigureScript event can be implemented by a script add-in. Similar to the OnAboutScript method, this lets a script take over the configuration function completely and display its own dialog when the config button is pressed. */
+    type OpusOnConfigureScript = (configureScriptData: ConfigureScriptData) => void;
+
+    /** The OnDeleteScript event can be implemented by a script add-in to receive notification when (if) it's deleted by the user via the Scripts management user interface. You might want to use this to cleanup any data files your script has created. */
+    type OpusOnDeleteScript = (deleteScriptData: DeleteScriptData) => void;
+
+    /** The OnDisplayModeChange event can be implemented by a script add-in to receive notification whenever the user changes the display mode in a tab.
+     * 
+     * The {@link DisplayModeChangeData.tab} property identifies the tab, and the **mode** property identifies the new display mode.*/
     type OpusOnDisplayModeChange = (displayModeChangeData: DisplayModeChangeData) => void;
 
-    /** The DoubleClkData.item property identifies the item that was double-clicked. You can return True from this event to prevent the default action from occurring. */
-    type OpusOnDoubleClick = (doubleClkData: DoubleClickData) => boolean | void;
+    /** The OnDoubleClick event can be implemented by a script add-in to receive notification when the user double-clicks on a file or folder in a tab.
+     * 
+     * By default your event handler is passed an {@link Item} object corresponding to the item that was double-clicked. Because constructing an Item object may take some time (e.g. on a network drive) you have the option for your handler to be called twice - once with only the path to the **item**, and a second time (if desired) with the full Item object. To do this:
+     * 1. Set the {@link ScriptInitData.early_dblclk} property to True when you initialize your script.
+     * 2. Your **OnDoubleClick** event will then be called with a the **early** property set to True in the {@link DoubleClickData} object.
+     * 3. When **early** is True, the **item** property is not present; instead, the **path** property provides the full path of the object, and the **is_dir** property indicates whether the item is a folder or file.
+     * 4. When the **OnDoubleClick** method returns, it will be called a second time, with **early** set to False and a full {@link Item} object available in the **item** property.
+     * 5. If you sets the **skipfull** property to True in the {@link DoubleClickData} object at the "early" stage, the second call to **OnDoubleClick** doesn't occur.
+     */
+    type OpusOnDoubleClick = (doubleClkData: DoubleClickData) => boolean | string;
 
-    /** The DragAndDropData.action property identifies the drag and drop action. You can return True to prevent the default action, or an integer to specify a different drop action. */
-    type OpusOnDragAndDrop = (dragAndDropData: DragAndDropData) => boolean | number | void;
+    /** The OnFAYTClose event can be implemented by a script add-in to receive notification when the FAYT closes (assuming it has been used with a script FAYT command). */
+    type OpusOnFAYTClose = (faytCloseData: FAYTCloseData) => void;
 
-    /** The FilterChangeData.tab property identifies the tab whose filter has changed. */
-    type OpusOnFilterChange = (filterChangeData: FilterChangeData) => void;
+    /** The OnFilesystemChange event can be implemented by a script add-in to receive notification when monitored files or folders change. Monitoring is established by calling the {@link FSUtil.WatchChanges} method. */
+    type OpusOnFilesystemChange = (filesystemChangeData: FilesystemChangeData) => void;
 
-    /** This event is called when your script's custom renaming functions are being requested. */
+    /** The OnFileOperationComplete event can be implemented by a script add-in to receive notifications when certain file operations complete. Currently the only type of operation that supports this is the **Rename** command, but others may be added in the future.
+     * 
+     * Receiving notifications is a two-step process each time:
+     * 1. When the operation starts, Opus will call your script with {@link FileOperationCompleteData.query} set to True.
+     * The script should return True if it is interested in the operation, and False otherwise.
+     * Notifications can incur a (usually small) memory and speed overhead, so scripts should avoid returning True when they won't really use the extra details. Similarly, scripts shouldn't do anything that would take a long time when deciding if they want a particular notification.
+     * 2. If the script returned True the first time, Opus will call it some time later, when the operation completes. {@link FileOperationCompleteData.query} will be set to False this time.
+     * The {@link FileOperationCompleteData.data} object will provide details about what happened. For example, data for a **Rename** operation will tell you which files were renamed and their new names.
+     * 
+     * Remember that operations can start and run in parallel. For example, the user may start a lengthy operation and then go to another tab and do some others there before the first one completes. Other scripts may also run operations in the background. Your scripts should be prepared to be queried about several operations in a row before their corresponding notifications come back.
+     * 
+     * Unless specified otherwise, data about all files affected by an operation will be returned via a single notification at the end, rather than separate notifications for each file.
+     * 
+     * Operations may be cancelled by the user (or pets, power cuts, etc.), so scripts shouldn't assume every positive query will result in a corresponding notification.
+     */
+    type OpusOnFileOperationComplete = (fileOperationCompleteData: FileOperationCompleteData) => boolean;
+
+    /** The OnFlatViewChange event can be implemented by a script add-in to receive notification whenever the user changes the display mode in a tab. */
+    type OpusOnFlatViewChange = (flatViewChangeData: FlatViewChangeData) => void;
+
+    /** The OnGetCopyQueueName event can be implemented by a script add-in to override the default copy queue behavior when the *Automatically manage file copy queues* option on the Copying Files page in Preferences is turned on. The event is passed the default copy queue name along with information relating to the copy operation. It can accept the default queue name, provide its own or disable queuing and run the operation immediately.
+     * 
+     * - The {@link GetCopyQueueNameData.sourcetab} and {@link GetCopyQueueNameData.desttab|desttab} properties identify the {@link Tab} objects involved in the copy operation, and the {@link GetCopyQueueNameData.source|source} and {@link GetCopyQueueNameData.dest|dest} properties provide the source and destination {@link Path} objects.
+     * - The {@link GetCopyQueueNameData.source_drives|source_drives} and {@link GetCopyQueueNameData.dest_drives|dest_drives} properties return a string consisting of **0** and **1** characters, indicating which physical drives are involved in the operation. For example, if drive `A:` was involved, the first character would be a **1**, otherwise it would be a **0**; if drive `B:` was involved, the second character would be a **1**, and so on.
+     * - The {@link GetCopyQueueNameData.name|name} property indicates the default copy queue name, and {@link GetCopyQueueNameData.move|move} is True if the operation is a move rather than a copy.
+     * 
+     * You can accept the default name by returning False, or return the a new queue name to use. If you return True the queue will be bypassed. 
+     */
+    type OpusOnGetCopyQueueName = (getCopyQueueNameData: GetCopyQueueNameData) => string | boolean;
+
+    /** The OnGetCustomFields event can be implemented by a rename script to add custom fields to the *Rename* dialog. This lets you provide one or more controls that users can use to pass parameters to your script. */
     type OpusOnGetCustomFields = (getCustomFieldsData: GetCustomFieldsData) => void;
 
-    /** The HelpData.window property is a handle to the parent window for any dialogs. Return True if you have displayed help. */
-    type OpusOnGetHelp = (helpData: HelpData) => boolean | void;
+    /** The OnGetNewName event is one of the three alternate entry points for rename scripts. The other two events - **Rename_GetNewName** and **Rename_GetNewName2**, are deprecated and should only be used for backwards compatibility with Opus 10.
+     * 
+     * When using a rename script, the **OnGetNewName** event is called for every selected file and folder, giving the script a chance to modify the name.
+     * 
+     * The {@link GetNewNameData.item} property identifies the item being renamed. You can access the item's metadata and other information using the various {@link Item} properties.
+     * 
+     * 
+     * The {@link GetNewNameData.oldname|oldname} property returns the "old name" pattern as entered by the user in the rename dialog. The {@link GetNewNameData.newname|newname} property returns the proposed new name of the item. This represents the result of all the other non-scripted options in the rename dialog (capitalization, automatic numbering, etc).
+     * 
+     * You can return two different types from this event:     * 
+     * - *bool*: If you return `True`, the item will not be renamed. If you return `False` (this is the default) the item will be renamed to the proposed new name (the {@link GetNewNameData.newname|newname} property).
+     * - *string*: You can return a *string* to specify a new name for the item.
+     */
+    type OpusOnGetNewName = (getNewNameData: GetNewNameData) => string | boolean;
 
-    /** The GetNewNameData.item property identifies the item being renamed. Return the new name as a string, or True to skip this item, or False to cancel the operation. */
-    type OpusOnGetNewName = (getNewNameData: GetNewNameData) => string | boolean | void;
+    /** The OnInit event is called once for each script add-in to initialize it. The event will be called on program startup, and also if a script is added or edited while Opus is already running. Implementing the **OnInit** event is optional, but highly recommended as it allows you to provide a name, description and other information to be shown to the user in Preferences. It also provides a way for a script to add internal commands and columns (although the {@link OpusOnAddCommands|OnAddCommands} and {@link OpusOnAddColumns|OnAddColumns} methods provide a better way to do this).*/
+    type OpusOnInit = (initData: ScriptInitData) => boolean;
 
-    /** This event is called when your script is first loaded. Use the InitData object to initialize the script's properties. */
-    type OpusOnInit = (initData: ScriptInitData) => boolean | void;
-
-    /** When Opus starts up, or when an include file script is added or edited, its OnInitIncludeFile method is called. This gives the include file a chance to tell Opus something about itself, by setting the various properties of the IncludeFileInitData object. */
+    /** The OnInitIncludeFile event is called once for each include file script to initialize it. Implementing this event is optional, but recommended as it allows you to provide a name, description and other information such as minimum version requirements. 
+     * 
+     * When Opus starts up, or when an include file script is added or edited, its **OnInitIncludeFile** method is called. This gives the include file a chance to tell Opus something about itself, by setting the various properties of the **IncludeFileInitData** object. */
     type OpusOnInitIncludeFile = (initData: IncludeFileInitData) => void;
 
-    /** The ListerResizeData.lister property identifies the Lister that was resized. */
+    /** The OnListerResize event can be implemented by a script add-in to receive notification whenever a Lister window is resized.
+     * 
+     * The ListerResizeData.lister property identifies the Lister that was resized. */
     type OpusOnListerResize = (listerResizeData: ListerResizeData) => void;
 
-    /** The ListerUIChangeData.change property identifies the UI element that changed. */
+    /** The OnListerUIChange event can be implemented by a script add-in to receive notification when the state of certain user interface elements in the Lister changes.
+     * 
+     * The {@link ListerUIChangeData.lister} property identifies the Lister, and the **change** property is a *string* indicating the element that changed. You can discover the actual state of the element using the {@link Command.IsSet} method. */
     type OpusOnListerUIChange = (listerUIChangeData: ListerUIChangeData) => void;
 
-    /** The OpenListerData.lister property identifies the Lister that was opened. */
-    type OpusOnOpenLister = (openListerData: OpenListerData) => void;
+    /** The OnOpenLister event can be implemented by a script add-in to receive notification when a new Lister is opened.
+     * 
+     * The {@link OpenListerData.lister} property identifies the newly opened Lister.
+     * 
+     * This event is initially called immediately after the Lister has been created, before any folders have been read or any tabs have been opened. If you return True from this event, it will be called again after all tabs have been created. You can use the {@link OpenListerData.after} property to distinguish between these calls.
+     */
+    type OpusOnOpenLister = (openListerData: OpenListerData) => boolean;
 
-    /** The OpenTabData.tab property identifies the tab that was opened. */
+    /** The OnOpenTab event can be implemented by a script add-in to receive notification when a new tab opens.
+     * 
+     * The {@link OpenTabData.tab} property identifies the the newly opened tab. Note that this method is not called when a new Lister is opened, irrespective of how many tabs it contains - instead, you can identify all the tabs in the newly opened Lister by implementing the {@link OpusOnOpenLister|OnOpenLister} event.*/
     type OpusOnOpenTab = (openTabData: OpenTabData) => void;
 
-    /** This event is called when one of your script's custom columns is being requested. */
+    /** The OnPeriodicTimer event can be implemented by a script add-in to have Opus call your script at regular intervals. The {@link DOpus.SetTimer} method can be used to create timers, and your **OnPeriodicTimer** method will be called regularly for each timer you create. 
+     * 
+     * The **id** property indicates which timer your method is being called for.
+     */
+    type OpusOnPeriodicTimer = (periodicTimerData: PeriodicTimerData) => void;
+
+     /** The OnPowerEvent event can be implemented by a script add-in to have Opus notify your script whenever certain system power-related events occur. 
+      * 
+      * The **type** property indicates the event that occurred. */
+    type OpusOnPowerEvent = (powerEventData: PowerEventData) => void;
+
+    /** The OnQuickFilterChange event can be implemented by a script add-in to receive notification when the quick filter changes within a tab.
+     * 
+     * The {@link QuickFilterChangeData.tab} property identifies the Tab the change occured in. */
+    type OpusOnQuickFilterChange = (quickFilterChangeData: QuickFilterChangeData) => void;
+
+     /** The OnScheduledTimer event can be implemented by a script add-in to have Opus call your script when a specific date/time is reached. The {@link DOpus.SetScheduledTimer} method can be used to create timers, and your **OnScheduledTimer** method will be called at most one time for each timer you create.
+      * 
+      * The **id** property indicates which timer your method is being called for. */
+    type OpusOnScheduledTimer = (scheduledTimerData: ScheduledTimerData) => void;
+
+    /** The OnScriptColumn event is the entry point for a custom column added by a script add-in. The actual name of the event is defined by the script itself, when the column is added via the {@link ScriptInitData.AddColumn} method - **OnScriptColumn** is merely a placeholder name.
+     * 
+     * When a script add-in adds a new column using {@link ScriptInitData.AddCommand}, it specifies the name of its entry point with the {@link ScriptColumn.method} property. When Opus wants to retrieve the value of the column for a particular file or folder, Opus will call that method within your script.
+     * 
+     * The {@link ScriptColumnData.item} property provides information about the file or folder in question, and the **col** property identifies the column you should return data for (in case you use the one method for more than one columns).
+     * 
+     * The return value from this event is ignored - instead, you should return the column data (and optionally, sorting and grouping information) by setting the appropriate values in the {@link ScriptColumnData} object.
+    */
     type OpusOnScriptColumn = (scriptColumnData: ScriptColumnData) => void;
 
-    /** This event is called when one of your script's custom commands is executed. */
-    type OpusOnScriptCommand = (scriptCommandData: ScriptCommandData) => void;
+    /** The OnScriptCommand event is the entry point for an internal command added by a script add-in. The actual name of the event is defined by the script itself, when the command is added via the {@link ScriptInitData.AddCommand} method - **OnScriptCommand** is merely a placeholder name.
+     * 
+     * When a script add-in adds a new internal command using {@link ScriptInitData.AddCommand}, it specifies the name of its entry point with the {@link ScriptCommand.method} property. When the internal command is run, Opus will call that method within your script.
+     * 
+     * The {@link ScriptCommandData.func} property provides information about the command environment (including any parsed arguments), and the {@link ScriptCommandData.cmdline|cmdline} property provides the raw command line that invoked your command.
+     * 
+     * Return the value `1` from this event if you want your function to be called once for each selected file. Otherwise your entry point will only be called once, and you can query all selected files using the various objects provided.
+     * 
+     * If this event returns True the function will be aborted - you might do this if an error occurs and the user chooses to abort the operation.
+    */
+    type OpusOnScriptCommand = (scriptCommandData: ScriptCommandData) => boolean | number;
 
-    /** This event is called when your script's configuration is changed by the user. */
+    /** The OnScriptConfigChange event can be implemented by a script add-in to receive notification whenever the user modifies the script's configuration via the Preferences editor. */
     type OpusOnScriptConfigChange = (scriptConfigChangeData: ScriptConfigChangeData) => void;
 
-    /** The SelectionChangeData.tab property identifies the tab whose selection has changed. */
-    type OpusOnSelectionChange = (selectionChangeData: SelectionChangeData) => void;
+    /** The OnScriptFAYTCommand event is the entry point for a script add-in that extends the FAYT field. The actual name of the event is defined by the script itself, when the command is added via the {@link ScriptInitData.AddCommand} method - **OnScriptFAYTCommand** is merely a placeholder name.
+     * 
+     * When a script extends the FAYT field by adding a new internal command using {@link ScriptInitData.AddCommand}, it specifies the name of its entry point with the {@link ScriptCommand.method} property. When the FAYT extension is triggered, Opus will call that method within your script.
+     * 
+     * The **ScriptFAYTCommandData** object provides information about what the user has typed to trigger your extension. 
+     */
+    type OpusOnScriptFAYTCommand = (scriptFAYTCommandData: ScriptFAYTCommandData) => void;
 
-    /** This event is called when Directory Opus is shutting down. Return True to prevent Opus from shutting down (if possible). */
-    type OpusOnShutdown = (shutdownData: ShutdownData) => boolean | void;
+    /** The OnShutdown event can be implemented by a script add-in to receive notification when Opus is shutting down. 
+     * 
+     * Opus calls this event when it is shutting down. The {@link ShutdownData.endsession} property will be True if Opus is quitting because Windows is shutting down. If **endsession** is False, you can return True from this event to prevent Opus from quitting - the return value is ignored if Windows is shutting down too.
+    */
+    type OpusOnShutdown = (shutdownData: ShutdownData) => boolean;
 
-    /** The SourceDestChangeData.tab property identifies the tab whose source/destination status has changed. */
-    type OpusOnSourceDestChange = (sourceDestChangeData: SourceDestChangeData) => void;
+    /** The OnSourceDestChange event can be implemented by a script add-in to receive notification whenever a tab's source/destination state changes. 
+     * 
+     * The {@link SourceDestData.tab} property identifies the tab, and the **source** and **dest** properties identify the new state (if both are False it means the tab is "off" - this can only happen in a single file-display Lister). */
+    type OpusOnSourceDestChange = (sourceDestData: SourceDestData) => void;
 
-    /** The SystemSettingChangeData.type property identifies the setting that changed. */
+    /** The OnStartup event can be implemented by a script add-in to receive notification when Opus starts up.
+     * 
+     * This event is only triggered when Opus starts up, therefore only script add-ins that are already installed will receive it. If a script is installed when Opus is already running it won't receive **OnStartup** until the next time Opus is started.
+     */
+    type OpusOnStartup = (startupData: StartupData) => void;
+
+    /** The OnStyleSelected event can be implemented by a script add-in to receive notification when the user selects a new Lister style. 
+     * 
+     * The {@link StyleSelectedData.lister} property identifies the Lister, and the **style** property returns the name of the newly selected style.
+     */ 
+    type OpusOnStyleSelected = (styleSelectedData: StyleSelectedData) => void;
+
+    /** The OnSystemSettingChange event can be implemented by a script add-in to receive notification when various system settings change.
+     * 
+     * The {@link SystemSettingChangeData.type} property identifies the setting that changed.
+     */
     type OpusOnSystemSettingChange = (systemSettingChangeData: SystemSettingChangeData) => void;
 
-    /** The TabClickData.tab property identifies the tab that was clicked. You can return True from this event to prevent the default action, or False (which is the default) to allow it to proceed. */
+    /** The OnTabClick event can be implemented by a script add-in to receive notification when a tab is clicked with a qualifier key held down. You can use this to override the default behavior (e.g. control-clicking tabs normally links them).
+     * 
+     * The {@link TabClickData.tab} property identifies the tab that was clicked. You can return True from this event to prevent the default action, or False (which is the default) to allow it to proceed. */
     type OpusOnTabClick = (tabClickData: TabClickData) => boolean | void;
 
-    /** This event is called when a viewer window event occurs. */
+    /** The OnViewerEvent event can be implemented by a script add-in to receive notification whenever certain events occur in the standalone image viewer. One possible use would be a script that automatically displays a floating toolbar whenever a standalone viewer is active, and hides it again when the window goes inactive or closes. 
+     * 
+     * The {@link ViewerEventData.viewer} property identifies the {@link Viewer} that the event occurred in. The **event** property returns a string identifying the event that occurred, and if applicable the **item** property identifies the {@link Item} involved.
+    */
     type OpusOnViewerEvent = (viewerEventData: ViewerEventData) => void;
 
 
@@ -5650,10 +5907,21 @@ declare global {
 export {};
 
 
+// V1.1 :
+// - Updated to suit 13.23 changes
+// - JSDoc updated up to FSUtil object (formatting and objects links)
+// - BugFix for Objects typings:
+//   - FSUtil.Hash (wrong signature)
+//   - Added non documented (might be partial) Opus objects : AddConfigPagesData, ConfigureScriptData
+// - BugFix for Scripting events typings:
+//   - Multiple return types fixed to match documentation and actual behavior (e.g. OnTabClick, OnDoubleClick, OnGetNewName, etc.)
+//   - Missing scripting event added : OnAddConfigPages, OnAddConfigPages, OnButtonContext, OnConfigBackup, OnConfigRestore, OnConfigureScript, OnDoubleClick, OnFAYTClose, OnFilesystemChange, OnFileOperationComplete, OnFlatViewChange, OnGetCopyQueueName, OnPeriodicTimer, OnPowerEvent, OnQuickFilterChange, OnScheduledTimer, OnStartup, OnStyleSelected.
+//   - Hallucinated scripting events removed : OnClosePlugin, OnBeginDrag, OnConfigChange, OnGetHelp, OpusOnSelectionChange
 
-// Documentation issues
-// * DOpusFactory : is missing methode EverythingInterface
-// * Tab object declares two object types (returned by unresolved and unsorted properties) that are not described within the documentation
-// * Dialog.Request : new last optional parameter (icon letter) : not yet described (waiting for non beta release ?)*
-// * DOpus.Request : mentioned in 13.22.1 release notes, but not in documentation
-// * FSUtil.Run : flags do not mention the "a" value introduced in 13.22.1
+
+// Notes : 
+// * Documentation is missing description for OnAddConfigPages, OnConfigureScript (13.17)
+// * Also misses the AddConfigPagesData, ConfigureScriptData objects (13.17)
+// * Dialog.AddConfigPages is missing from the documentation, but is required for OnAddConfigPages (13.17)
+// * OnOpenTab : First line "The On event" => "The OnOpenTab event"
+// * OnScriptCommand : According to the description, you can either return True or 1 : return type should be int or type 
