@@ -32,7 +32,7 @@
 Three specialized tasks are available (`Ctrl+Shift+B`):
 * **Build Index**: Compiles the global index linking `dopus.d.ts`, `global.d.ts`, `user_custom.d.ts`, and all detected include definitions.
 * **Fix Types**: Processes the current file to inject standardized include directives and JSDoc types for Opus events, command entry points, and custom columns.
-* **Generate Light Typings**: Creates a minified version of the API to reduce token usage when using AI Studio for library generation. (See `AI_STUDIO_METHOD.md` for details).
+* **Generate Minified Typings**: Creates a minified version of the API to reduce token usage when using AI Studio for library generation. (See `AI_STUDIO_METHOD.md` for details).
 
 ---
 
