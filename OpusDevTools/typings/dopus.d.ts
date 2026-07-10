@@ -490,7 +490,7 @@ declare global {
         DivertClipboard(varname: string): void;
         /** Creates a new {@link Dialog} object, that lets you display dialogs and popup menus. The dialog's **window** property will be automatically assigned to the source tab. */
         Dlg(): Dialog;
-        /** Returns a {@link Map} of the modifiers that have been set for this command (either by the **SetModifier** method, or in the case of script add-ins any modifiers that were set on the button that invoked the script). */
+        /** Returns a {@link DOpusMap|Map} of the modifiers that have been set for this command (either by the **SetModifier** method, or in the case of script add-ins any modifiers that were set on the button that invoked the script). */
         GetModifiers(): DOpusMap<string>;
         /** Returns True if the specified `Set` command condition is true. This is the equivalent of the `@ifset` command modifiers. The optional second parameter lets you test a condition based on a command other than `Set` - for example, `IsSet("VIEWERCMD=mark", "Show")` in the viewer to test if the current image is marked. */
         IsSet(condition: string, command?: string): boolean;
@@ -534,6 +534,13 @@ declare global {
          * 
          * The type argument must be one of the following strings: **std**, **msdos**, **script**, **wsl** and **eval**. Standard (**std**) is the default if the type is not specifically set. */
         SetType(type: string): void;
+        /** Returns True if the specified command condition is true (similar to the IsSet method and the the **@ifset** command modifiers).
+         * By default, "true" means that a toolbar button containing that command would appear checked/highlighted.
+         * The optional flags are:
+         * - e : test if the command is enabled rather than checked
+         * 
+         * For example, `TestCommandState("Show VIEWERCMD=mark")` in the viewer to test if the current image is marked. */
+        TestCommandState(command: string, flags?: string): boolean;
         /** This method can be used to update the appearance of toolbar buttons that use variables to determine their labels or states. For example, a button might use `@toggle:if` to set its selection state based on the existence of a *global-*, *tab-* or *Lister-scoped* variable. You would call this method if you have changed such a variable from a script to force buttons that use it to update. */
         UpdateToggle(): void;
     }
@@ -870,7 +877,21 @@ declare global {
         SetSyntax(type: string): void;
         /** Assigns a tooltip to this control, which will be shown when the mouse hovers over it. Pass an empty string to remove an existing tooltip. */
         SetTooltip(tip: string): void;
+        /** Sorts the groups in a listview control. You can use this in two ways:
+         * - Call with a `1` or `-1` to sort groups alphabetically (1 = forward, -1 = reverse).
+         * - Call with a callback function to implement custom sort order. Your callback will be called with two {@link DialogListGroup} objects, and should return the result of the comparison between the two (<0 if group1 < group2, 0 if group1 == group2, >0 if group1 > group2)
+         */
+        SortGroups(directionOrCallback: number | DialogGroupSortCallback): void;
+        /**Sorts the items in a listview control. You can use this in two ways:
+         * - Call with a 1-based column index to sort by that column. Use a negative number for a reverse sort.
+         * - Call with a callback function to implement custom sort order. Your callback will be called with two {@link DialogListItem} objects, and should return the result of the comparison between the two (<0 if item1 < item2, 0 if item1 == item2, >0 if item1 > item2)
+         */
+        SortItems(indexOrCallback: number | DialogItemSortCallback): void;
     }
+
+    // Defining callback types
+    type DialogGroupSortCallback = (group1: DialogListGroup, group2: DialogListGroup) => int;
+    type DialogItemSortCallback = (group1: DialogListItem, group2: DialogListItem) => int;
 
     interface CustomFieldData {
         /** The properties of the **CustomFieldData** object are entirely determined by the script itself. 
@@ -1410,7 +1431,7 @@ declare global {
          * 
          * The {@link Msg.event} property will be set to **tab** for notifications from a watched folder tab. 
          * 
-         * The {@link Msg.control} property tells you which tab the change occurred in; if you specified an ID when you called the **WatchTab** function, this will be in the {@link Msg.control} property - otherwise, it will be the numeric handle of the tab. Note that it's *not* the actual {@link Tab} object. You can access the {@link Tab} object via the {@link Msg.tab} property but this can be inefficient, as it requires a new {@link Tab} object to be created every time. If you're only monitoring one tab it's better to store the {@link Tab} object in your own variable - and if you're monitoring multiple tabs you could, e.g. use a unique ID for each one and keep the objects in a {@link Map}.
+         * The {@link Msg.control} property tells you which tab the change occurred in; if you specified an ID when you called the **WatchTab** function, this will be in the {@link Msg.control} property - otherwise, it will be the numeric handle of the tab. Note that it's *not* the actual {@link Tab} object. You can access the {@link Tab} object via the {@link Msg.tab} property but this can be inefficient, as it requires a new {@link Tab} object to be created every time. If you're only monitoring one tab it's better to store the {@link Tab} object in your own variable - and if you're monitoring multiple tabs you could, e.g. use a unique ID for each one and keep the objects in a {@link DOpusMap|Map}.
          * 
          * The {@link Msg.value} property tells you which notification event occurred. Possible values are **select**, **navigate**, **filechange**, **activate**, **srcdst**, **view**, **flat**, **filter** and **close** (sent if the tab is closed while you are monitoring it). 
          * 
@@ -1560,7 +1581,7 @@ declare global {
         /** Returns a DOpusFactory object (alias of DOpus.Create()) */
         Create: DOpusFactory;
         /** Creates a new Dialog object, that lets you display dialogs and popup menus. Note: Scripts should not usually use this when responding to events triggered by toolbars or folder tabs. The Dialog returned by DOpus.Dlg will not have its parent window configured. Most scripting events provide you an object which can either create a pre-configured Dialog or which includes a SourceTab property or similar which can do the same. In almost all situations you should use those instead. */
-        Dlg: Dialog;
+        Dlg: DopusDialogFactory;
         /** Returns a collection of Format objects representing the used-defined favorite formats. */
         favoriteformats: Format[];
         /** Returns a Favorites object which lets you query and modify the user-defined favorite folders. */
@@ -1646,20 +1667,29 @@ declare global {
         /** Kills a timer that was previous created with the SetTimer or SetScheduledTimer methods. */
         KillTimer(id: number): boolean;
         /** Loads an image file from the specified file. You can optionally specify the desired size to load the image at, and whether the alpha channel (if any) should be loaded or not. 
-         * Note that the typehint argument should only be provided if passing a Blob.
          * 
          * You can load icons from the internal icon set using #iconname. E.g. #copy would load the copy image from the default set. By default the large size is returned; use #0:iconname for the small size. You can also specify a particular icon set using #setname:iconname or #0:setname:iconname.
          * 
-         * Images can be extracted from DLLs and EXEs by appending the icon index to the filename, e.g. /system/zipfldr.dll,1.
+         * You can load SVG code as a string. In that case, the last parameter is not alpha but remove_padding.
          * 
-         * You can also provide a Blob object containing the image data instead of a filename. If you do this, the second parameter can be a typehint string to provide a type-hint for the data format (e.g. pass ".jpg" if you know it's JPEG data). 
+         * Images can be extracted from DLLs and EXEs by appending the icon index to the filename, e.g. /system/zipfldr.dll,1.
          * 
          * The returned Image object can be given as the value of the Control.label property for a static control in a script dialog (when that control is in "image" mode). You can also assign it as the icon property of a Dialog object to specify a custom window icon for your script dialog. 
          * 
          * If width and height are not provided, they default to 0, meaning the image is loaded at its native size. The width and height parameters only specify the desired size; the resultant image may be smaller or larger, and should be scaled after loading if you need it to be an exact size. The main purpose of the width and height parameters is to influence which image within an icon is loaded; most other image formats either ignore the parameters or only use them to speed things up, such as avoiding a full JPEG decode if a partial decode can satisfy the desired image size. 
          * 
          * Images are loaded transparently (with alpha) by default; set the alpha argument to False if you want to disable that. */
-        LoadImage(filenameorobject: string | Blob, typehint?: string, width?: number, height?: number, alpha?: boolean): Image;
+        LoadImage(fileOrIdOrSvgCode: string, width?: number, height?: number, alphaOrRemovePaddinf?: boolean): Image;
+        /** Loads an image file from the specified Blob object. You can optionally specify the desired size to load the image at, and whether the alpha channel (if any) should be loaded or not. 
+         * 
+         * The Blob object contains the image data. The second parameter can be a typehint string to provide a type-hint for the data format (e.g. pass ".jpg" if you know it's JPEG data). 
+         * 
+         * The returned Image object can be given as the value of the Control.label property for a static control in a script dialog (when that control is in "image" mode). You can also assign it as the icon property of a Dialog object to specify a custom window icon for your script dialog. 
+         * 
+         * If width and height are not provided, they default to 0, meaning the image is loaded at its native size. The width and height parameters only specify the desired size; the resultant image may be smaller or larger, and should be scaled after loading if you need it to be an exact size. The main purpose of the width and height parameters is to influence which image within an icon is loaded; most other image formats either ignore the parameters or only use them to speed things up, such as avoiding a full JPEG decode if a partial decode can satisfy the desired image size. 
+         * 
+         * Images are loaded transparently (with alpha) by default; set the alpha argument to False if you want to disable that. */
+        LoadImage(blobObj: Blob, typehint?: string, width?: number, height?: number, alpha?: boolean): Image;
         /** Extracts a thumbnail from the specified external file. You can optionally specify a timeout (in milliseconds) and the desired size to load the thumbnail at. 
          * 
          * The optional flags value supports the following flags (supplied as a string):
@@ -1723,6 +1753,11 @@ declare global {
         Toolbars(type: string): Toolbars;
         /** Returns a string indicating the type of an object or variable. */
         TypeOf(object: any): string;
+    }
+
+    interface DopusDialogFactory extends Dialog {
+        // Call signature to allow DOpus.Dlg()
+        (): Dialog;
     }
 
     interface DOpusFactory {
@@ -2091,7 +2126,7 @@ declare global {
     }
 
     /** Returns the full pathname of the file. */
-    interface File {
+    interface DOpusFile {
         /** Returns a Win32 error code that indicates the success or failure of the last operation. If the previous operation succeeded this will generally be 0. 
          * 
          * For example, if you try to open a non-existing file for reading using FSUtil.OpenFile, a valid File object will be returned - but the file itself would not be open. You can check if error returns 0 before proceeding to use the File object. */
@@ -2617,7 +2652,7 @@ declare global {
          * 
          * The second parameter can be the name (or PKEY) of a property to retrieve, in which case the property value will be returned. 
          * 
-         * Alternatively, the second argument can be a {@link Map} object which lets you retrieve multiple properties at once. Each property you want to retrieve should be added to the {@link Map} with its name as a key, with an empty string as its value. The values in the **Map** will be replaced by the property values. 
+         * Alternatively, the second argument can be a {@link DOpusMap|Map} object which lets you retrieve multiple properties at once. Each property you want to retrieve should be added to the {@link DOpusMap|Map} with its name as a key, with an empty string as its value. The values in the **Map** will be replaced by the property values. 
          * 
          * The optional **type** argument is a string that lets you control how the properties are looked up by name (not case-sensitive):
          * - R : The first property whose raw name matches will be used.
@@ -2653,11 +2688,11 @@ declare global {
         GetSignature(path: string, verifyOrFlags: boolean | string): Signature;
         /** Creates a temporary folder (with a unique name) and returns the path to it in a {@link Path} object. Temporary folders created with this method have a limited lifetime after which Opus will automatically delete them (it will also clean them up when it's shutdown and restarted). The default lifetime is 20 minutes; you can change this using the optional parameter. */
         GetTempDirPath(lifetime: number): Path;
-        /** Creates a temporary file and returns a {@link File} object ready to be written to.
+        /** Creates a temporary file and returns a {@link DOpusFile} object ready to be written to.
          * 
          * The returned object supports both reading and writing, without having to open the file a second time (although you can do that if it is easier). 
          * 
-         * You can obtain the name of the file using the {@link File}.path property. 
+         * You can obtain the name of the file using the {@link DOpusFile|File}.path property. 
          * 
          * An optional filename **suffix** can be specified; if not provided (or an empty string is passed), the default is ".tmp". 
          * 
@@ -2677,7 +2712,7 @@ declare global {
          * 
          * The optional **window** parameter lets you associate the **File** object with a {@link Tab} or a {@link Lister}, which will be used if Opus needs to display any dialogs (e.g. a UAC elevation dialog).
          */
-        GetTempFile(suffix: string, prefix: string, flags: string, window: object): File;
+        GetTempFile(suffix: string, prefix: string, flags: string, window: object): DOpusFile;
         /** Creates a temporary file (with a unique name) and returns the path to it in a {@link Path} object. 
          * 
          * An optional filename **suffix** can be specified; if not provided (or an empty string is passed), the default is ".tmp". 
@@ -2737,13 +2772,13 @@ declare global {
          * 
          * See the description of the {@link Wild.Parse} method for a list of the valid flags. */
         NewWild(pattern: string, flags: string): Wild;
-        /** Opens or creates a file and returns a {@link File} object that lets you access its contents as binary data. 
+        /** Opens or creates a file and returns a {@link DOpusFile|File} object that lets you access its contents as binary data. 
          * A **File** object is always returned, even if the file could not be opened. Check **File.error** on the returned object immediately after creating it to see if opening the file succeeded. 
          * Even if a file was not be opened, some of the returned object's methods may still work. For example, if a file exists but permissions block you from opening it, you may still be able to change its attributes, or vice versa. 
          * 
          * The first argument can be either:
          * - A string or {@link Path} object which specifies the file to open
-         * - An existing {@link Blob} object to create a {@link File} object that gives you read/write stream access to a chunk of memory.
+         * - An existing {@link Blob} object to create a {@link DOpusFile|File} object that gives you read/write stream access to a chunk of memory.
          * 
          * When opening a {@link Blob}, the created object will always be in *read-write mode* and the rest of the parameters (**mode** and **window/elevation**) are not used and need not be specified.
          *  
@@ -2778,7 +2813,7 @@ declare global {
          * 
          * Example (VBScript): ```Set F = DOpus.FSUtil.OpenFile("C:\Test.txt","wrcf","NoElevate")```
          */
-        OpenFile(pathorobject: string | Path, mode: string, windoworstring?: object): File;
+        OpenFile(pathorobject: string | Path, mode: string, windoworstring?: object): DOpusFile;
         /** Returns a string indicating the underlying "namespace" type of the specified file path. Possible values are:
          * - shell : The path refers to the Windows shell - e.g. a virtual folder like This PC
          * - filesys : The path is a real filesystem path - e.g. C:\Windows
@@ -2846,7 +2881,7 @@ declare global {
         Run(cmdline: string, show: number, flags?: string, input?: string, curdir?: string, encode?:string): boolean | RunResults;
         /** Allows you to run external programs and optionally capture their output. 
          * 
-         * Instead of six separate arguments, this method also supports receiving its arguments via a {@link Map} object. 
+         * Instead of six separate arguments, this method also supports receiving its arguments via a {@link DOpusMap|Map} object. 
          * 
          * The parameters can be provided as values of the Map, with the following names: "command", "showcmd", "flags", "input", "cd" and "codepage".
          */
@@ -2886,11 +2921,11 @@ declare global {
     }
 
     interface Func {
-        /** Returns an Args object that provides access to any arguments given on the command line that invoked this script. This is used when the script has added an internal command to Opus. A command line template can be provided when the command is added, and any arguments the user provides on the command line for the script command will be available via this object.  For most use the argsmap property may be an easier way to access your command's arguments. */
+        /** Returns an {@link Args} object that provides access to any arguments given on the command line that invoked this script. This is used when the script has added an internal command to Opus. A command line template can be provided when the command is added, and any arguments the user provides on the command line for the script command will be available via this object.  For most use the argsmap property may be an easier way to access your command's arguments. */
         args: Args;
-        /** Returns a Map object that provides keyword lookup for each of the arguments given on the command line. An argument will only be present in the Map if it was used on the command line, so you can easily check which arguments are present using the Map.exists() method. */
+        /** Returns a {@link DOpusMap|Map} object that provides keyword lookup for each of the arguments given on the command line. An argument will only be present in the {@link DOpusMap|Map} if it was used on the command line, so you can easily check which arguments are present using the {@link DOpusMap.exists()|Map.exists()} method. */
         argsmap: DOpusMap<any>;
-        /** This property returns a pre-filled Command object that can be used to run commands against the source and destination tabs. Using this object is the equivalent of calling DOpusFactory.Command and setting the source and destination tabs manually. */
+        /** This property returns a pre-filled {@link Command} object that can be used to run commands against the source and destination tabs. Using this object is the equivalent of calling {@link DOpusFactory.Command} and setting the source and destination tabs manually. */
         command: Command;
         /** This object represents the default destination tab for the function. */
         desttab: Tab;
@@ -2898,67 +2933,75 @@ declare global {
         fromdrop: boolean;
         /** Returns True if the command was invoked via the keyboard (i.e. via a hotkey rather than a button). */
         fromkey: boolean;
-        /** Returns a string indicating any qualifier keys that were held down by the user when the command was invoked. The string can contain any or all of the following: shift, ctrl, alt, lwin, rwin. If no qualifiers were down, the string will be: none Note that any qualifiers that were actually involved in launching this command will be filtered out from this property. For example, a hotkey assigned to Ctrl+L would not report that the Ctrl key was held down, because it was integral in launching the command. Use the `qualifiers_raw` property to access an unfiltered set of qualifiers. */
+        /** Returns a string indicating any qualifier keys that were held down by the user when the command was invoked. 
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*. 
+         * 
+         * If no qualifiers were down, the string will be: *none* 
+         * 
+         * Note that any qualifiers that were actually involved in launching this command will be filtered out from this property. For example, a hotkey assigned to `Ctrl`+`L` would not report that the `Ctrl` key was held down, because it was integral in launching the command. Use the `qualifiers_raw` property to access an unfiltered set of qualifiers. */
         qualifiers: string;
-        /** Returns a string indicating any qualifier keys that were held down by the user when the command was invoked. This provides the true qualifier set, without the filtering as described above. The string can contain any or all of the following: shift, ctrl, alt, lwin, rwin. */
+        /** Returns a string indicating any qualifier keys that were held down by the user when the command was invoked. This provides the true qualifier set, without the filtering as described above. 
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*. */
         qualifiers_raw: string;
         /** This object represents the default source tab for the function. */
         sourcetab: Tab;
         /** If this button was run from the standalone image viewer, this object represents the viewer window. */
         viewer: Viewer;
-        /** Creates a new Dialog object, that lets you display dialogs and popup menus. The dialog's window property will be automatically assigned to the source tab. */
+        /** Creates a new {@link Dialog} object, that lets you display dialogs and popup menus. The dialog's **window** property will be automatically assigned to the source tab. */
         Dlg(): Dialog;
     }
 
     interface GlobalFilters {
         /** Returns True if the global wildcard filters are enabled. */
         enable: boolean;
-        /** Returns the global filename filter wildcard pattern. If the wildcard is configured to use regular expressions, it will have a regex: prefix in front of the pattern. */
+        /** Returns the global filename filter wildcard pattern. If the wildcard is configured to use regular expressions, it will have a **regex**: prefix in front of the pattern. */
         file: string;
-        /** Returns the global folder filter wildcard pattern. If the wildcard is configured to use regular expressions, it will have a regex: prefix in front of the pattern. */
+        /** Returns the global folder filter wildcard pattern. If the wildcard is configured to use regular expressions, it will have a **regex**: prefix in front of the pattern. */
         folder: string;
         /** Returns True if the global option to hide hidden files is on. */
         hidehidden: boolean;
         /** Returns True if the global option to hide operating system files is on. */
         hidesystem: boolean;
-        /** Returns a PermanentFilters object which describes the statue of the Permanent Filters. */
+        /** Returns a {@link PermanentFilters} object which describes the statue of the **Permanent Filters**. */
         readonly permanent: PermanentFilters;
     }
 
     interface GetCopyQueueNameData {
-        /** Returns a Path object representing the destination path of the copy operation. */
+        /** Returns a {@link Path} object representing the destination path of the copy operation. */
         dest: Path;
-        /** Returns a Tab object representing the destination folder tab. */
+        /** Returns a {@link Tab} object representing the destination folder tab. */
         desttab: Tab;
-        /** Returns a binary string indicating the physical drive indices that the destination path is located on (if any). For example, 00100000000000000000000000 indicates that drive C: is the destination drive. */
+        /** Returns a binary string indicating the physical drive indices that the destination path is located on (if any). For example, 00100000000000000000000000 indicates that drive `C:` is the destination drive. */
         dest_drives: string;
         /** Returns True if the operation is a move instead of a copy. */
         move: boolean;
         /** Returns the default queue name for this operation. */
         name: string;
-        /** Returns a Path object representing the source path of the copy operation. */
+        /** Returns a {@link Path} object representing the source path of the copy operation. */
         source: Path;
-        /** Returns a Tab object representing the source folder tab. */
+        /** Returns a {@link Tab} object representing the source folder tab. */
         sourcetab: Tab;
-        /** Returns a binary string indicating the physical drive indices that the source path is located on (if any). For example, 00001000000000000000000000 indicates that drive E: is the source drive. */
+        /** Returns a binary string indicating the physical drive indices that the source path is located on (if any). For example, 00001000000000000000000000 indicates that drive `E:` is the source drive. */
         source_drives: string;
     }
 
     interface GetCustomFieldData {
-        /** Returns a CustomFieldData object, that the script can use to add custom fields to the Rename dialog. Each property added to the object in this method will be create a new field in the dialog, allowing the user to supply additional information to your rename script. */
+        /** Returns a {@link CustomFieldData} object, that the script can use to add custom fields to the Rename dialog. Each property added to the object in this method will be create a new field in the dialog, allowing the user to supply additional information to your rename script. */
         fields: CustomFieldData;
-        /** This lets you assign labels to your script's custom fields, that are shown to the user in the Rename dialog. To do this, set this property to a Map created via the DOpusFactory.Map method, filled with name/label string pairs. */
+        /** This lets you assign labels to your script's custom fields, that are shown to the user in the Rename dialog. To do this, set this property to a {@link DOpusMap|Map} created via the {@link DOpusFactory.Map} method, filled with name/label string pairs. */
         field_labels: DOpusMap<string>;
-        /** This lets you assign "cue banners" to any edit fields created by your script. A cue banner is displayed inside an empty edit field to prompt the user what sort of data the field expects. To use this, set this property to a Map created via the DOpusFactory.Map method, filled with name/banner string pairs. */
+        /** This lets you assign "cue banners" to any edit fields created by your script. A cue banner is displayed inside an empty edit field to prompt the user what sort of data the field expects. To use this, set this property to a {@link DOpusMap|Map} created via the {@link DOpusFactory.Map} method, filled with name/banner string pairs. */
         field_tips: DOpusMap<string>;
-        /** You can use this field to specify which control gets the input focus by default when your fields appear for the first time. Set it to the name of the desired control. You can also specify !oldname or !newname to assign focus to the standard old and new name fields. */
+        /** You can use this field to specify which control gets the input focus by default when your fields appear for the first time. Set it to the name of the desired control. You can also specify **!oldname** or **!newname** to assign focus to the standard old and new name fields. */
         focus: string;
     }
 
     interface GetNewNameData {
-        /** Returns a CustomFieldData object which provides the values of any custom fields your script added to the Rename dialog. */
+        /** Returns a {@link CustomFieldData} object which provides the values of any custom fields your script added to the *Rename* dialog. */
         custom: CustomFieldData;
-        /** Returns an Item object representing the file or folder being renamed. */
+        /** Returns an {@link Item} object representing the file or folder being renamed. */
         item: Item;
         /** Returns the proposed new name of the item. This will be the result of the application of any selected standard options in the rename dialog (numbering, capitalization, etc). */
         newname: string;
@@ -2966,7 +3009,7 @@ declare global {
         newname_ext: string;
         /** Returns the file extension of the proposed new name, taking multi-part extensions into account (e.g. will return ".part1.rar" rather than ".rar"). */
         newname_ext_m: string;
-        /** Returns the contents of the New Name field (that is, not the calculated new name after all the options have been applied, but the actual text contents of the field as entered by the user). */
+        /** Returns the contents of the *New Name* field (that is, not the calculated new name after all the options have been applied, but the actual text contents of the field as entered by the user). */
         newname_field: string;
         /** Returns the file stem of the proposed new name. Does not take multi-part extensions into account (e.g. will return "catpictures.part1" rather than "catpictures"). */
         newname_stem: string;
@@ -2976,16 +3019,28 @@ declare global {
         oldname_field: string;
         /** Returns True if the script is being called to generate a preview for the rename dialog, False if the file is being renamed for real. */
         preview: boolean;
-        /** Returns a Tab object representing the tab the rename operation is taking place in. If there is no tab, returns False instead. */
+        /** Returns a {@link Tab} object representing the tab the rename operation is taking place in. If there is no tab, returns False instead. */
         tab: Tab;
     }
 
     /** Returns a collection of ColumnValue objects that you can enumerate. */
     interface HighlightedColumns {
-        /** Returns a collection of ColumnValue objects that you can enumerate */
+        /** Returns a collection of {@link ColumnValue} objects that you can enumerate */
         (): any;
     }
 
+    /** The **HTTPRequest** object lets you easily send an asynchronous HTTP request to a remote webserver and receive and process the response.
+     * 
+     * This object is created via the {@link Dialog} object's `NewHTTPReq` method, and so requires a Script Dialog in order to use. The dialog also must be detached.
+     * 
+     * The general process to use this object is as follows:
+     * 1. Create the HTTPRequest object
+     * 2. Add any required headers
+     * 3. Add POST data or GET query name/value pairs as required
+     * 4. Send the request
+     * 5. Process "http" events in your message loop
+     * 6. Read any returned data when you get a "data" event.
+     */
     interface HTTPRequest {
         /** When a response has been received, returns the value of the Content-Type response header. */
         contenttype: string;
@@ -3001,17 +3056,17 @@ declare global {
         response: string;
         /** Returns the HTTP response code (e.g. 200, 404). */
         responsecode: number;
-        /** Returns the current status of the request. This is also provided via the Msg.value property when you retrieve an HTTP message in your message loop. Valid status values are: notready, ready, pending, data, complete, error, shutdown. 
+        /** Returns the current status of the request. This is also provided via the {@link Msg.value} property when you retrieve an HTTP message in your message loop. Valid status values are: notready, ready, pending, data, complete, error, shutdown. 
          * 
          * A status value of "data" means the response has been received and data is available to read. A status of "complete" means the response is complete (e.g. a HEAD request won't return any data, so you'd look for "complete" in that case). */
         status: string;
         /** Aborts the request if it hasn't yet returned any data, and removes any headers and post data that you've added. 
          * 
-         * Calling this method resets the HTTPRequest object to its initial state, meaning it can be reused to send another request. */
+         * Calling this method resets the `HTTPRequest` object to its initial state, meaning it can be reused to send another request. */
         Abort(): void;
-        /** Adds one or more headers to the HTTP request. You can either provide two strings (a name and a value), or a Map of name → value pairs to add more than one header at once. */
+        /** Adds one or more headers to the HTTP request. You can either provide two strings (a name and a value), or a {@link DOpusMap|Map} of name → value pairs to add more than one header at once. */
         AddHeader(nameOrMap: string | DOpusMap<string>, value?: string): void;
-        /** Adds one or more name/value pairs to the request's POST data. You can either provide the name and value as two arguments, in which case you can also optionally provide a content type string. Alternatively, you can provide a Map of name → value pairs. The value of a posted data element can either be a string, or a Blob object to provide binary data. 
+        /** Adds one or more name/value pairs to the request's POST data. You can either provide the name and value as two arguments, in which case you can also optionally provide a content type string. Alternatively, you can provide a {@link DOpusMap|Map} of name → value pairs. The value of a posted data element can either be a string, or a {@link Blob} object to provide binary data. 
          * 
          * If you only add a single item of POST data you can leave the name empty (pass an empty string). This lets you, for example, POST data formatted as JSON - set the name to an empty string, the value to the JSON data in string form, and contenttype to `application/json`. 
          * 
@@ -3020,15 +3075,15 @@ declare global {
          * The data will be sent as `multipart/form-data` if you either pass a Blob object, or the Map contains more than one name/value pair.
          */
         AddPostData(nameOrMap: string | DOpusMap<any>, value?: string, contenttype?: string, filename?: string, encoding?: string): void;
-        /** Adds one or more name/value pairs to the request's QUERY data. You can either provide the name and value as two arguments, or you can provide a Map of name → value pairs. The query data will be automatically url-encoded and appended to the request string when the request is sent. */
+        /** Adds one or more name/value pairs to the request's QUERY data. You can either provide the name and value as two arguments, or you can provide a {@link DOpusMap|Map} of name → value pairs. The query data will be automatically url-encoded and appended to the request string when the request is sent. */
         AddQueryData(nameOrMap: string | DOpusMap<string>, value?: string): void;
-        /** Returns a Map of name → value pairs containing the response headers once the response data has been received. */
+        /** Returns a {@link DOpusMap|Map} of name → value pairs containing the response headers once the response data has been received. */
         GetResponseHeaders(): DOpusMap<string>;
         /** Once a response has been received (i.e. your message loop gets an "http" message with the value type set to "data"), you can call this function to read the returned data. Note that this function will block until all data is received. 
          * 
-         * The function tries to interpret the returned data automatically based on the Content-Type header in the response. Text data wil be converted to a string if possible. Image data will be returned as Image object if it's a format that Opus recognises. Otherwise, a Blob containing the response data will be returned. */
+         * The function tries to interpret the returned data automatically based on the Content-Type header in the response. Text data wil be converted to a string if possible. Image data will be returned as {@link Image} object if it's a format that Opus recognises. Otherwise, a {@link Blob} containing the response data will be returned. */
         ReadResponse(): string | Image | Blob;
-        /** Use this function instead of `ReadResponse` to read the raw data from the response without trying to interpret it. The data is returned as a Blob object. 
+        /** Use this function instead of `ReadResponse` to read the raw data from the response without trying to interpret it. The data is returned as a {@link Blob} object. 
          * 
          * You can specify the maximum about of data to read in bytes. If the requested size is available it will be returned; otherwise the function will return immediately with as much data as possible. If you specify size as 0, or don't specify a size, then the function will block until the entire response has been received. If you specify size as -1 then the function will return as much data as possible, but won't block. */
         ReadResponseData(size?: number): Blob;
@@ -3039,7 +3094,7 @@ declare global {
          * This function also supports local Unix sockets (on Windows 10 and above). Use `http+unix://` as the protocol followed by the path to the .sock file. Note that OS limitations mean the socket file path can't use unicode characters (ASCII only) and can't be longer than 107 characters.
          */
         SendRequest(url: string, action?: string): void;
-        /** Specifies a timeout in seconds (default is 30). Functions which block like ReadResponse will timeout if a complete response is not received in time. Set to 0 for no timeout. */
+        /** Specifies a timeout in seconds (default is 30). Functions which block like `ReadResponse` will timeout if a complete response is not received in time. Set to 0 for no timeout. */
         SetTimeout(seconds: number): void;
         /** Specifies the User-Agent string of the request, if requires. */
         SetUserAgent(agent: string): void;
@@ -3065,7 +3120,7 @@ declare global {
     }
 
     interface ImageMeta {
-        /** Returns the value of the specified column, as listed in the Pictures section of the Keywords for Columns page. */
+        /** Returns the value of the specified column, as listed in the Pictures section of the [Keywords for Columns](https://docs.dopus.com/doku.php?id=reference:metadata_keywords:keywords_for_columns) page. */
         [column: string]: any;
     }
 
@@ -3104,7 +3159,7 @@ declare global {
          * - 16384   : encrypted
          * - 524288  : pinned
          * 
-         * Using the fileattr property, which returns a FileAttr object, may be easier than dealing with the raw attribute flags. */
+         * Using the fileattr property, which returns a {@link FileAttr} object, may be easier than dealing with the raw attribute flags. */
         attr: number;
         /** Returns the item attributes as a string, as displayed in the file display. */
         attr_text: string;
@@ -3114,31 +3169,43 @@ declare global {
         create: DOpusDate;
         /** Returns the "creation" date, in UTC. */
         create_utc: DOpusDate;
-        /** For Item objects obtained from a Viewer, this property is True if the item represents the currently displayed image and False otherwise. For Item objects obtained from a file display, the property indicates whether or not the item is the one with focus. The focus property is the more proper way to check this, but both work in case you forget which is which. */
+        /** For **Item** objects obtained from a {@link Viewer}, this property is True if the item represents the currently displayed image and False otherwise. 
+         * 
+         * For **Item** objects obtained from a file display, the property indicates whether or not the item is the one with focus. The **focus** property is the more proper way to check this, but both work in case you forget which is which. */
         current: boolean;
-        /** Returns the display name of the item. Only a few items have a display name that is different to their actual name - some examples are certain system folders (like C:\Users which might have a translated display name in non-English locales). */
+        /** Returns the display name of the item. Only a few items have a display name that is different to their actual name - some examples are certain system folders (like *`C:\Users`* which might have a translated display name in non-English locales). */
         display_name: string;
         /** For Item objects obtained from a file display, this property is True for folders that are currently expanded in the file display. */
         expanded: boolean;
         /** Returns the filename extension. */
         ext: string;
-        /** Returns the filename extension, taking multi-part extensions into account. For example, a file called "file.part1.rar" might return ".rar" for ext but ".part1.rar" for ext_m. */
+        /** Returns the filename extension, taking multi-part extensions into account. For example, a file called "file.part1.rar" might return ".rar" for **ext** but ".part1.rar" for **ext_m**. */
         ext_m: string;
-        /** Returns True if the item failed when used by a command. This is only meaningful in conjunction with the Command.files collection - once the command has returned, this property will indicate success or failure on a per-file basis. */
+        /** Returns True if the item failed when used by a command. This is only meaningful in conjunction with the {@link Command.files} collection - once the command has returned, this property will indicate success or failure on a per-file basis. */
         failed: boolean;
-        /** Returns a FileAttr object that represents the item's attributes. */
+        /** Returns a {@link FileAttr} object that represents the item's attributes. */
         fileattr: FileAttr;
-        /** If the file display this item came from is grouped by a particular column, this property returns a {@link FileGroup} object representing the group the item is in. If the item has no group this will return an empty string. This property is about grouping the file display by one of its columns. If you're looking for file type groups, see the groups and groupsobject properties, just below. */
+        /** If the file display this item came from is grouped by a particular column, this property returns a {@link FileGroup} object representing the group the item is in. If the item has no group this will return an empty string. 
+         * 
+         * This property is about grouping the file display by one of its columns. If you're looking for *file type groups*, see the **groups** and **groupsobject** properties, just below. */
         filegroup: FileGroup;
-        /** For Item objects obtained from a file display, this property is True if the object represents the item with focus, and False otherwise. Only one item can have focus at a time. The item with focus is typically shown with an outline around it, and is usually the last item which was clicked on, or which was moved to with the keyboard. The item with focus is often also one of the selected items, but not always; selection and focus are two separate things. For Item objects obtained from a Viewer, the property indicates if the file is the one currently shown in the viewer. The current property is the more proper way to test this, but focus also works. */
+        /** For **Item** objects obtained from a file display, this property is True if the object represents the item with focus, and False otherwise. Only one item can have focus at a time. The item with focus is typically shown with an outline around it, and is usually the last item which was clicked on, or which was moved to with the keyboard. The item with focus is often also one of the selected items, but not always; selection and focus are two separate things. 
+         * 
+         * For **Item** objects obtained from a {@link Viewer}, the property indicates if the file is the one currently shown in the viewer. The **current** property is the more proper way to test this, but **focus** also works. */
         focus: boolean;
-        /** Returns True for folder items if their size has been calculated by, for example, the GetSizes command. If False, the size property will be unreliable for folders. */
+        /** Returns True for folder items if their size has been calculated by, for example, the **GetSizes** command. If False, the **size** property will be unreliable for folders. */
         got_size: boolean;
-        /** Returns a Vector of FiletypeGroup objects representing any and all file type groups that this file is a member of. If you only want to check membership of a particular file type group, see the InGroup method in the section below. If you're looking for information on how the file display is grouping this file based on one of the displayed columns, see the filegroup property, just above. */
+        /** Returns a {@link Vector} of {@link FiletypeGroup} objects representing any and all file type groups that this file is a member of. 
+         * 
+         * If you only want to check membership of a particular file type group, see the {@link InGroup} method in the section below. 
+         * 
+         * If you're looking for information on how the file display is grouping this file based on one of the displayed columns, see the **filegroup** property, just above. */
         groups: Vector<FiletypeGroup>;
-        /** Similar to the groups property, except a FiletypeGroups object is returned instead of a Vector. */
+        /** Similar to the groups property, except a {@link FiletypeGroups} object is returned instead of a {@link Vector}. */
         groupsobject: FiletypeGroups;
-        /** Returns a HighlightedColumns object that lets you enumerate any selected cells belonging to this item. This only applies if the item was retrieved from a Tab. Normally you would use this in a script run from the Copy Highlighted Cells context menu. */
+        /** Returns a {@link HighlightedColumns} object that lets you enumerate any selected cells belonging to this item. 
+         * 
+         * This only applies if the item was retrieved from a {@link Tab}. Normally you would use this in a script run from the **Copy Highlighted Cells** context menu. */
         highlighted: HighlightedColumns;
         /** This is a unique ID for the item; it is used internally by Opus. */
         id: number;
@@ -3150,7 +3217,7 @@ declare global {
         is_reparse: boolean;
         /** Returns True if the item is a symbolic link. */
         is_symlink: boolean;
-        /** Returns a Metadata object that provides access to the item's metadata. */
+        /** Returns a {@link Metadata} object that provides access to the item's metadata. */
         metadata: Metadata;
         /** Returns the "last modified" date, in local time. */
         modify: DOpusDate;
@@ -3158,13 +3225,13 @@ declare global {
         modify_utc: DOpusDate;
         /** Returns the name of the item. */
         name: string;
-        /** Returns the filename "stem" of the item. This is the name of the item with the filename extension removed. It will be the same as the name for folders. */
+        /** Returns the filename "stem" of the item. This is the name of the item with the filename extension removed. It will be the same as the **name** for folders. */
         name_stem: string;
-        /** Returns the filename "stem" of the item, taking multi-part extensions into account. For example, a file called "file.part1.rar" might return "file.part1" for name_stem but "file" for name_stem_m. */
+        /** Returns the filename "stem" of the item, taking multi-part extensions into account. For example, a file called "file.part1.rar" might return "file.part1" for **name_stem** but "file" for **name_stem_m**. */
         name_stem_m: string;
         /** Returns True if the item was in an expanded sub-folder, False if it was in the root of the folder. */
         nested: boolean;
-        /** Returns the path of the item's parent folder. This does not include the name of the item itself, which can be obtained via the name property. */
+        /** Returns the path of the item's parent folder. This does not include the name of the item itself, which can be obtained via the **name** property. */
         path: Path;
         /** For stored query collections, returns a {@link StoredQuery} object that lets you read and modify the query's properties. */
         query: StoredQuery;
@@ -3174,19 +3241,36 @@ declare global {
         selected: boolean;
         /** Returns the short path of the item, if it has one. Note that short paths are disabled by default in Windows 10. */
         shortpath: Path;
-        /** Returns the size of the item as a FileSize object. */
+        /** Returns the size of the item as a {@link FileSize} object. */
         size: FileSize;
-        /** Retrieves the infotip for the item. The object must have been retrieved from a Tab (i.e. it can't have come from a directory enumeration). */
+
+        /** Retrieves the infotip for the item. The object must have been retrieved from a {@link Tab} (i.e. it can't have come from a directory enumeration). */
         InfoTip(): string;
-        /** Tests the file for membership of the specified file type group. Each file type group has two names: An internal name which is always the same in all languages, and a display name which may be translated differently for each language. The display name is what you see in the File Types editor. Groups that come pre-defined when you install Opus have internal names like "Archives" and "Music" (which are also their English display names). User-defined groups have internal names which are unique, automatically generated GUID strings like "{C4B716ED-2A9C-43C6-B325-7DADDEEFADA9}". The group argument should be the name of the group you wish to test against, e.g. "Music". By default, both the internal name and the display name are checked, and a match on either will return true. Prefix the group argument with "name:" to restrict the search to internal names, or with "disp:" to restrict the search to display names. To get a list of all file type groups which the file matches, use the groups property instead (see the section above). */
-        InGroup(group: string): boolean;
-        /** This method returns a Vector of strings representing any labels that have been assigned to the item. Both arguments are optional. The first is a wildcard pattern that lets you filter the returned labels based on their category. For example, pass "Status" to only retrieve a list of status icons assigned to a file. The second optional argument contains flags keywords that control how the labels are returned. The only defined flag is "explicit" - if specified, wildcard and label filters will not be considered - only explicitly assigned labels will be returned. Note that if you want to provide the second argument but don't want to filter by category you should pass "*" for the first argument to match all categories. If explicit labels aren't requested, any global wildcard/filter labels will be returned, along with any per-folder labels configured for the item's folder. Per-folder content type and folder type labels, however, are not currently returned by this function. */
-        Labels(category?: string, flags?: string): Vector<string>;
-        /** Returns True if the item matches the specified filter. The filter argument must be a Filter object created by the DOpusFactory.NewFilter method. You can also pass a textual filter in string form, to parse the filter and compare the item in one operation, although if you're comparing multiple items it would be much more efficient to create the Filter first. */
-        MatchFilter(filterOrClause: Filter | string): boolean;
-        /** Opens this file and returns a File object that lets you access its contents as binary data.
+        /** Tests the file for membership of the specified file type group. 
          * 
-         * By default the file will be opened in read mode - specify "w" for the optional mode parameter to open the file in write mode. Note that you cannot both read and write with the same File object. 
+         * Each file type group has two names: An internal name which is always the same in all languages, and a display name which may be translated differently for each language. The display name is what you see in the File Types editor. Groups that come pre-defined when you install Opus have internal names like "*Archives*" and "*Music*" (which are also their English display names). User-defined groups have internal names which are unique, automatically generated GUID strings like "*{C4B716ED-2A9C-43C6-B325-7DADDEEFADA9}*". 
+         * 
+         * The group argument should be the name of the group you wish to test against, e.g. "*Music*". 
+         * 
+         * By default, both the internal name and the display name are checked, and a match on either will return true. Prefix the *group* argument with "*name:*" to restrict the search to internal names, or with "*disp:*" to restrict the search to display names. 
+         * 
+         * To get a list of all file type groups which the file matches, use the **groups** property instead (see the section above). */
+        InGroup(group: string): boolean;
+        /** This method returns a {@link Vector} of strings representing any labels that have been assigned to the item. 
+         * 
+         * Both arguments are optional. The first is a wildcard pattern that lets you filter the returned labels based on their category. For example, pass *"Status"* to only retrieve a list of status icons assigned to a file. 
+         * 
+         * The second optional argument contains flags keywords that control how the labels are returned. The only defined flag is *"explicit"* - if specified, wildcard and label filters will not be considered - only explicitly assigned labels will be returned. Note that if you want to provide the second argument but don't want to filter by category you should pass `"*"` for the first argument to match all categories. 
+         * 
+         * If explicit labels aren't requested, any global wildcard/filter labels will be returned, along with any per-folder labels configured for the item's folder. Per-folder *content type* and *folder type* labels, however, are not currently returned by this function. */
+        Labels(category?: string, flags?: string): Vector<string>;
+        /** Returns True if the item matches the specified filter. The *filter* argument must be a {@link Filter} object created by the {@link DOpusFactory.Filter} method. 
+         * 
+         * You can also pass a textual filter in string form, to parse the filter and compare the item in one operation, although if you're comparing multiple items it would be much more efficient to create the **Filter** first. */
+        MatchFilter(filterOrClause: Filter | string): boolean;
+        /** Opens this file and returns a {@link DOpusFile|File} object that lets you access its contents as binary data.
+         * 
+         * By default the file will be opened in read mode - specify "w" for the optional mode parameter to open the file in write mode. Note that you cannot both read and write with the same **File** object. 
          * 
          * When opening in write mode, you can also specify optional flags that control how the file is opened:
          * - wc : create a new file, only if it doesn't already exist.
@@ -3196,21 +3280,21 @@ declare global {
          * - wt ! truncate existing file. If the file exists it will be truncated. The file will not be created if it doesn't already exist.
          * - d : delete-on-close.
          * 
-         * When using write mode, you may add f (force) to any of the above mode strings to tell Opus to clear the read-only file attribute if it blocks modifying an existing file; otherwise, attempting to open a read-only file for writing will fail. For example, "wof" is like "wo" mode but also clears the read-only attribute. 
+         * When using write mode, you may add *f* (force) to any of the above mode strings to tell Opus to clear the read-only file attribute if it blocks modifying an existing file; otherwise, attempting to open a read-only file for writing will fail. For example, *"wof"* is like *"wo"* mode but also clears the read-only attribute. 
          * 
-         * If you only want to make changes to the file's attributes without modifying its data you can also specify "m" to open it in modify mode. 
+         * If you only want to make changes to the file's attributes without modifying its data you can also specify "*m*" to open it in *modify* mode. 
          * 
-         * The optional window parameter lets you associate the File object with a Tab or a Lister, which will be used if Opus needs to display any dialogs (e.g. a UAC elevation dialog). You may also specify the string "NoElevate" to prevent UAC elevation entirely, or "ElevateNoAsk" to prevent UAC prompts while still gaining elevation if something else has already performed it. 
+         * The optional *window* parameter lets you associate the {@link DOpusFile|File} object with a {@link Tab} or a {@link Lister}, which will be used if Opus needs to display any dialogs (e.g. a UAC elevation dialog). You may also specify the string "NoElevate" to prevent UAC elevation entirely, or "ElevateNoAsk" to prevent UAC prompts while still gaining elevation if something else has already performed it. 
          * 
-         * A File object is always returned, even if the file could not be opened. Check File.error on the returned object immediately after creating it to see if opening the file succeeded. Even if the file was not be opened, some of the object's methods may still work. For example, if a file doesn't exist then you can't open it or set its attributes, but permissions on an existing file may allow you to set its attributes while blocking you from modifying it or vice versa. */
-        Open(mode: string, window: object): File;
+         * A {@link DOpusFile|File} object is always returned, even if the file could not be opened. Check {@link DOpusFile.error|File.error} on the returned object immediately after creating it to see if opening the file succeeded. Even if the file was not be opened, some of the object's methods may still work. For example, if a file doesn't exist then you can't open it or set its attributes, but permissions on an existing file may allow you to set its attributes while blocking you from modifying it or vice versa. */
+        Open(mode: string, window: object): DOpusFile;
         /** Returns the value of the specified shell property for the item. The property argument can be the property's PKEY or its name. 
          * 
-         * If you provide a name then the optional second argument lets you control how the properties are looked up by name. If the value of type is "R" then the first property whose raw name matches the supplied name will be used. If the value is "D" then the first property whose display name matches the supplied name will be used. If type is omitted then both raw and display names can match. 
+         * If you provide a name then the optional second argument lets you control how the properties are looked up by name. If the value of *type* is "R" then the first property whose raw name matches the supplied name will be used. If the value is "D" then the first property whose display name matches the supplied name will be used. If *type* is omitted then both raw and display names can match. 
          * 
-         * Note that if a shell property is returned by the system as a SAFEARRAY type, it will be converted automatically to a Vector object. */
+         * Note that if a shell property is returned by the system as a SAFEARRAY type, it will be converted automatically to a {@link Vector} object. */
         ShellProp(property: string, type: string): any;
-        /** Updates the Item object from the file on disk. You might use this if you had run a command to change an item's timestamp or attributes, and wanted to retrieve the new information. */
+        /** Updates the **Item** object from the file on disk. You might use this if you had run a command to change an item's timestamp or attributes, and wanted to retrieve the new information. */
         Update(): void;
     }
 
@@ -3218,24 +3302,24 @@ declare global {
     interface Items {
         /** Indexed access */
         (index: number): Item;
-        /** When this Items object comes from the Dialog.Multi method, it includes a result property giving the result of the dialog. The items[] is only valid if result returns True. If it returns False it means the user cancelled the dialog. */
+        /** When this Items object comes from the {@link Dialog.Multi} method, it includes a **result** property giving the result of the dialog. The items[] is only valid if **result** returns True. If it returns False it means the user cancelled the dialog. */
         result: boolean;
         /** Removes any nested items from the collection (items that came from sub-folders rather than the root folder). The number of items removed is returned. */
         RemoveNested(): number;
-        /** Updates the state of this object. This only applies to collections that come from certain sources (e.g. from a Tab). When the Items object is first retrieved, a snapshot is taken. Changes made after that outside of the script will not be detected unless you call the Update method. */
+        /** Updates the state of this object. This only applies to collections that come from certain sources (e.g. from a {@link Tab}). When the **Items** object is first retrieved, a snapshot is taken. Changes made after that outside of the script will not be detected unless you call the **Update** method. */
         Update(): void;
     }
 
     interface Lister {
-        /** Returns a Tab object representing the currently active (source) tab. */
+        /** Returns a {@link Tab} object representing the currently active (source) tab. */
         activetab: Tab;
         /** Lister window bottom-edge coordinate. */
         bottom: number;
-        /** Returns the custom title of the Lister (if any) as set by the Set LISTERTITLE command. This may be an empty string. The title property returns the actual window title. */
+        /** Returns the custom title of the Lister (if any) as set by the **`Set LISTERTITLE`** command. This may be an empty string. The *title* property returns the actual window title. */
         custom_title: string;
         /** Returns the ID of the virtual desktop this Lister is on. */
         desktop: string;
-        /** Returns a Tab object representing the current destination tab (in a dual-display Lister). */
+        /** Returns a {@link Tab} object representing the current destination tab (in a dual-display Lister). */
         desttab: Tab;
         /** Indicates whether the Lister is in dual-display mode or not. Possible values are:
          * - 0 : single-display mode
@@ -3243,7 +3327,7 @@ declare global {
          * - 2 : dual-display, horizontal layout
         */
         dual: number;
-        /** Returns the current split percentage of the dual displays (e.g. 50 indicates they are evenly sized). */
+        /** Returns the current split percentage of the dual displays (e.g. **50** indicates they are evenly sized). */
         dualsize: number;
         /** Returns True if this Lister is currently the foreground (active) window. */
         foreground: boolean;
@@ -3270,19 +3354,23 @@ declare global {
         state: string;
         /** Returns the name of the Lister style which was last applied to the Lister, or an empty string if there is none. This is just the last style which was loaded and does not mean the Lister still looks the same; the user may have opened or closed panels and made other changes via other methods in the time since the style was applied. */
         style: string;
-        /** Returns a collection of Tab objects that represent all tabs in this Lister. In a dual-display Lister this includes tabs in both the left and right file displays. */
+        /** Returns a collection of {@link Tab} objects that represent all tabs in this Lister. In a dual-display Lister this includes tabs in both the left and right file displays. */
         tabs: Tab[];
-        /** Returns the name of the Folder Tab Group which was last loaded into the left half of the Lister, or an empty string if no group has been loaded. The name only changes when a Folder Tab Group is loaded. The current tabs may no longer resemble the named tab group if the user has made changes since the group was loaded. The name persists across restarts, through the Default Lister and saved Layouts. */
+        /** Returns the name of the Folder Tab Group which was last loaded into the left half of the Lister, or an empty string if no group has been loaded. 
+         * 
+         * The name only changes when a Folder Tab Group is loaded. The current tabs may no longer resemble the named tab group if the user has made changes since the group was loaded. The name persists across restarts, through the Default Lister and saved Layouts. */
         tabgroupleft: string;
-        /** Similar to tabgroupleft, above, but for the right half of the Lister (if any). */
+        /** Similar to **tabgroupleft**, but for the right half of the Lister (if any). */
         tabgroupright: string;
-        /** Returns a collection of Tab objects that represent the tabs in the left/top side of a dual-display Lister. In a single-display Lister this is equivalent to all the tabs in the Lister. */
+        /** Returns a collection of {@link Tab} objects that represent the tabs in the left/top side of a dual-display Lister. In a single-display Lister this is equivalent to all the tabs in the Lister. */
         tabsleft: Tab[];
-        /** Returns a collection of Tab objects that represent the tabs in the right/bottom side of a dual-display Lister. In a single-display Lister this will return an empty collection. */
+        /** Returns a collection of {@link Tab} objects that represent the tabs in the right/bottom side of a dual-display Lister. In a single-display Lister this will return an empty collection. */
         tabsright: Tab[];
         /** Returns the current title of the Lister window. */
         title: string;
-        /** Returns a collection of Toolbar objects representing all currently open toolbars in this Lister. The collection is obtained directly each time the script asks for it, and is not a snapshot, so you don't need to call Update for it to reflect changes. */
+        /** Returns a collection of {@link Toolbar} objects representing all currently open toolbars in this Lister. 
+         * 
+         * The collection is obtained directly each time the script asks for it, and is not a snapshot, so you don't need to call **Update** for it to reflect changes. */
         toolbars: Toolbar[];
         /** Lister window top-edge coordinate; */
         top: number;
@@ -3293,14 +3381,14 @@ declare global {
          * - 3 : two folder trees are open (in a dual-display Lister)
         */
         tree: number;
-        /** If the utility panel is currently open, returns a string indicating the currently selected utility page. Possible values are find (which means the Find panel's Simple version), findadvanced, sync, dupe, undo, filelog, ftplog, otherlog, email. */
+        /** If the utility panel is currently open, returns a string indicating the currently selected utility page. Possible values are **find** (which means the Find panel's Simple version), **findadvanced**, **sync**, **dupe**, **undo**, **filelog**, **ftplog**, **otherlog**, **email**. */
         utilpage: string;
         /** Indicates whether or not the utility panel is currently open. Possible values are:
          * - 0 : utility panel is not open
          * - 1 : utility panel is open
         */
         utilpane: number;
-        /** This Vars object represents all defined variables with Lister scope (that are scoped to this Lister). */
+        /** This {@link Vars} object represents all defined variables with *Lister* scope (that are scoped to this Lister). */
         vars: Vars;
         /** Indicates whether or not the viewer pane is currently open. Possible values are:
          * - 0 : viewer pane is not open
@@ -3308,79 +3396,93 @@ declare global {
          * - 2 : viewer pane is open, horizontal layout
         */
         viewpane: number;
-        /** Returns the path of the file currently displayed by the lister's viewer pane. The path will be an empty string if there is no file currenly displayed. The path is obtained directly each time the script asks for it, and is not a snapshot, so you don't need to call Update for it to reflect changes. */
+        /** Returns the path of the file currently displayed by the lister's viewer pane. The path will be an empty string if there is no file currenly displayed. 
+         * 
+         * The path is obtained directly each time the script asks for it, and is not a snapshot, so you don't need to call **Update** for it to reflect changes. */
         viewpanefile: Path;
         /** Returns the current visibility state of the Lister window. Possible values are:
-         * - min     : the Lister is minimized
-         * - max     : the Lister is maximized
-         * - hidden  : the Lister is hidden
-         * - normal  : the Lister is displayed normally
+         * - **min**     : the Lister is minimized
+         * - **max**     : the Lister is maximized
+         * - **hidden**  : the Lister is hidden
+         * - **normal**  : the Lister is displayed normally
         */
         windowstate: string;
-        /** Creates a new Dialog object, that lets you display dialogs and popup menus. The dialog's window property will be automatically assigned to this Lister. */
+
+        /** Creates a new {@link Dialog} object, that lets you display dialogs and popup menus. The dialog's window property will be automatically assigned to this Lister. */
         Dlg(): Dialog;
         /** Returns True if the Lister is on the current virtual desktop. */
         IsOnCurrentDesktop(): boolean;
         /** Moves the Lister window to the specified virtual desktop. Returns True if successful. */
         MoveToDesktop(desktop: string): boolean;
-        /** Used to change how the Lister window is grouped with other Opus windows on the taskbar. Specify a group name to move the window into an alternative group, or omit the group argument to reset back to the default group. If one or more windows are moved into the same group, they will be grouped together, separate from other the default group. This only works when taskbar grouping is enabled. Group names are limited to 103 characters and will be truncated if longer. Spaces and dots in group names are automatically converted to underscores. Returns True on success. */
+        /** Used to change how the Lister window is grouped with other Opus windows on the taskbar. Specify a group name to move the window into an alternative group, or omit the group argument to reset back to the default group. If one or more windows are moved into the same group, they will be grouped together, separate from other the default group. 
+         * 
+         * This only works when taskbar grouping is enabled. Group names are limited to 103 characters and will be truncated if longer. Spaces and dots in group names are automatically converted to underscores. Returns True on success. */
         SetTaskbarGroup(group: string): boolean;
-        /** The first time a script accesses a particular Lister object, a snapshot is taken of the Lister state. If the script then makes changes to that Lister (e.g. it opens a new tab, or moves the window), these changes will not be reflected by the object (unless otherwise mentioned). To re-synchronize the object with the Lister, call the Lister.Update method. */
+        /** The first time a script accesses a particular **Lister** object, a snapshot is taken of the Lister state. If the script then makes changes to that Lister (e.g. it opens a new tab, or moves the window), these changes will not be reflected by the object (unless otherwise mentioned). To re-synchronize the object with the Lister, call the **Lister.Update** method. */
         Update(): void;
     }
 
-    /** Lets you enumerate the currently open Listers. Do not assume that DOpus.listers(0) is the window which launched your script. See the note near the top of the page. */
+    /** Lets you enumerate the currently open Listers. 
+     * 
+     * Do not assume that DOpus.listers(0) is the window which launched your script. See the note near the top of [the page](https://docs.dopus.com/doku.php?id=reference:scripting_reference:scripting_objects:listers). */
     interface Listers {
         /** Indexed access */
         (index: number): Lister;
-        /** Returns a Lister object representing the most recently active Lister window. Do not assume that DOpus.listers.lastactive is the window which launched your script. See the note near the top of the page. */
+        /** Returns a {@link Lister} object representing the most recently active Lister window. 
+         * 
+         * Do not assume that **DOpus.listers.lastactive** is the window which launched your script. See the note near the top of [the page](https://docs.dopus.com/doku.php?id=reference:scripting_reference:scripting_objects:listers). */
         lastactive: Lister;
-        /** Returns true if the specified Lister still exists, or false if not. You can pass either a Lister object or an index. */
+
+        /** Returns true if the specified Lister still exists, or false if not. You can pass either a {@link Lister} object or an index. */
         Exists(listerOrIndex: Lister | number): boolean;
-        /** Moves one or more Lister windows to the front. This method accepts one or more arguments; each argument can either be a Lister object or a Vector of Lister objects. The last window will placed on top, and all others will be below that in reverse order. */
+        /** Moves one or more Lister windows to the front. This method accepts one or more arguments; each argument can either be a {@link Lister} object or a {@link Vector} of {@link Lister} objects. The last window will placed on top, and all others will be below that in reverse order. */
         ToFront(...lister: Lister): void;
-        /** The first time a script accesses the DOpus.listers property, a snapshot is taken of all currently open Listers. If the script then opens or closes Listers itself, these changes will not be reflected by this collection. To re-synchronize the collection, call the Update method. */
+        /** The first time a script accesses the **DOpus.listers** property, a snapshot is taken of all currently open Listers. If the script then opens or closes Listers itself, these changes will not be reflected by this collection. To re-synchronize the collection, call the **Update** method. */
         Update(): void;
     }
 
     interface ListerResizeData {
-        /** Returns a string indicating the resize action that occurred. This will be one of the following strings: resize, minimize, maximize, restore. */
+        /** Returns a *string* indicating the resize action that occurred. This will be one of the following strings: *resize*, *minimize*, *maximize*, *restore*. */
         action: string;
         /** Returns the new width of the Lister in pixels. */
         width: number;
         /** Returns the new height of the Lister in pixels. */
         height: number;
-        /** Returns a Lister object representing the Lister that was resized. */
+        /** Returns a {@link Lister} object representing the Lister that was resized. */
         lister: Lister;
     }
 
     interface ListerUIChangeData {
-        /** Returns a string indicating which UI element changed. This will equal one of the following strings: dual, tree, metapane, viewer, utility, duallayout, metapanelayout, viewerlayout, toolbars, toolbarset, toolbarsauto, minmax. */
+        /** Returns a string indicating which UI element changed. This will equal one of the following strings: *dual*, *tree*, *metapane*, *viewer*, *utility*, *duallayout*, *metapanelayout*, *viewerlayout*, *toolbars*, *toolbarset*, *toolbarsauto*, *minmax*. */
         change: string;
-        /** Returns a Lister object representing the Lister that is changing. */
+        /** Returns a {@link Lister} object representing the Lister that is changing. */
         lister: Lister;
-        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  The string can contain any or all of the following: shift ctrl, alt, lwin, rwin  If no qualifiers were down, the string will be: none */
+        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*.  If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
     }
 
     interface Menu {
-        /** Adds a new item to the menu and returns a MenuItem object that represents it. All arguments are optional - you can configure the menu item via its properties after creating it if you want. As well as this method you can use the specialised methods AddSeparator, AddSubMenu and AddToggle to add particular types of items.
+        /** Adds a new item to the menu and returns a {@link MenuItem} object that represents it. 
+         * 
+         * All arguments are optional - you can configure the menu item via its properties after creating it if you want. As well as this method you can use the specialised methods **AddSeparator**, **AddSubMenu** and **AddToggle** to add particular types of items.
          * - label	Specify the item's label. Not used for separators.
          * - id	Specify the item's ID (a numeric value). Not used for separators.
          * - position	Specify the new item's position. By default new items are added to the end.
          * - type	Specify the item's type. Valid types are "item", "toggle", "separator" and "submenu".
-         * - submenu	For "sub" type items only, specifies the Menu object that defines the contents of the sub-menu.
+         * - submenu	For "sub" type items only, specifies the **Menu** object that defines the contents of the sub-menu.
          */
         AddItem(label?: string, id?: number, position?: number, type?: 'item' | 'toggle' | 'separator' | 'submenu', submenu?: any): MenuItem;
-        /** Defines a "radio group", a set of two or more mutually exclusive toggle items. When an item in a radio group is chosen, it appears selected, and the previously selected item in the group is automatically deselected. The id values must be the same as those provided when the menu items were added. */
+        /** Defines a "radio group", a set of two or more mutually exclusive *toggle* items. When an item in a radio group is chosen, it appears selected, and the previously selected item in the group is automatically deselected. The *id* values must be the same as those provided when the menu items were added. */
         AddRadioGroup(...id: number): void;
-        /** Adds a new separator item to the menu. If position is not provided the separator is added to the end. */
+        /** Adds a new separator item to the menu. If *position* is not provided the separator is added to the end. */
         AddSeparator(position?: number): MenuItem;
         /** Adds a new sub-menu item to the menu. All arguments are optional - you can configure the menu item via its properties after creating it if you want.
          * - label	Specify the item's label.
          * - id	Specify the item's ID (a numeric value).
          * - position	Specify the new item's position. By default new items are added to the end.
-         * - submenu	Specify the Menu object that defines the contents of the sub-menu.
+         * - submenu	Specify the **Menu** object that defines the contents of the sub-menu.
          */
         AddSubMenu(label?: string, id?: number, position?: number, submenu?: any): MenuItem;
         /** Adds a new toggle item to the menu. All arguments are optional - you can configure the menu item via its properties after creating it if you want.
@@ -3389,33 +3491,46 @@ declare global {
          * - position	Specify the new item's position. By default new items are added to the end.
          */
         AddToggle(label: string, checked: boolean, id?: number, data?: any): MenuItem;
-        /** Locates a menu item either by ID, position or label, and returns the MenuItem object representing it.
-         * By default, id specifies the ID provided when the menu item was added. If you set the optional by_position argument to true the id value is interpreted as a position (e.g. FindItem(3, true) would return the fourth item in the menu.
+        /** Locates a menu item either by ID, position or label, and returns the {@link MenuItem} object representing it.
+         * 
+         * By default, *id* specifies the ID provided when the menu item was added. If you set the optional *by_position* argument to true the *id* value is interpreted as a position (e.g. `FindItem(3, true)` would return the fourth item in the menu.
+         * 
          * You can also locate an item by its label, by passing a string as the argument. Standard wildcard patterns are supported.
          */
         FindItem(id: number, by_position?: boolean): MenuItem;
-        /** Locates a menu item either by ID, position or label, and returns the MenuItem object representing it.
-         * By default, id specifies the ID provided when the menu item was added. If you set the optional by_position argument to true the id value is interpreted as a position (e.g. `FindItem(3, true)` would return the fourth item in the menu.
+        /** Locates a menu item either by ID, position or label, and returns the {@link MenuItem} object representing it.
+         * 
+         * By default, *id* specifies the ID provided when the menu item was added. If you set the optional *by_position* argument to true the *id* value is interpreted as a position (e.g. `FindItem(3, true)` would return the fourth item in the menu.
+         * 
          * You can also locate an item by its label, by passing a string as the argument. Standard wildcard patterns are supported.
          */
         FindItem(label: string): MenuItem;
         /** Removes a menu item from the menu, either by ID, position or label.
-         * By default, id specifies the ID provided when the menu item was added. If you set the optional by_position argument to true the id value is interpreted as a position (e.g. `RemoveItem(3, true)` would remove the fourth item in the menu.
+         * 
+         * By default, *id* specifies the ID provided when the menu item was added. If you set the optional *by_position* argument to true the *id* value is interpreted as a position (e.g. `RemoveItem(3, true)` would remove the fourth item in the menu.
+         * 
          * You can also remove an item by its label, by passing a string as the argument. Standard wildcard patterns are supported - only the first matching item will be removed.
+         * 
          * The method returns true if the item was successfully removed. */
         RemoveItem(id: number, by_position?: boolean): boolean;
         /** Removes a menu item from the menu, either by ID, position or label.
-         * By default, id specifies the ID provided when the menu item was added. If you set the optional by_position argument to true the id value is interpreted as a position (e.g. RemoveItem(3, true) would remove the fourth item in the menu.
+         * 
+         * By default, *id* specifies the ID provided when the menu item was added. If you set the optional *by_position* argument to true the *id* value is interpreted as a position (e.g. `RemoveItem(3, true)` would remove the fourth item in the menu.
+         * 
          * You can also remove an item by its label, by passing a string as the argument. Standard wildcard patterns are supported - only the first matching item will be removed.
+         * 
          * The method returns true if the item was successfully removed. */
         RemoveItem(label: string): boolean;
         /** Displays the popup menu. You can show the menu in three ways: 
          * - Relative to a specific dialog control, e.g. as a drop-down button or context menu on a list view (pass the dialog and control name)
          * - At a specific point relative to a dialog (pass the dialog and x / y coordinates)
          * - At a specific point on the screen (pass x / y coordinates without a dialog)
+         * 
          * To display the menu on a dialog, pass the appropriate Dialog object and either the name of a control or x,y coordinates relative to the top-left corner of the dialog's client area.
+         * 
          * If a control is specified the menu will appear positioned over that control. Special handling exists for button controls - the menu will appear positioned below it, like a drop-down menu button. For other controls the menu will appear at the mouse coordinates if the mouse is currently over that control (this lets you add right-click functionality).
-         * The optional flags are:
+         * 
+         * The optional *flags* are:
          * - a:	auto-assign accelerators
          * - b	bottom-align (above the specified point)
          * - c	center-align (centered horizontally over the specified point)
@@ -3424,44 +3539,60 @@ declare global {
          * - m	multi-select (see below)
          * - r	right mouse button (otherwise assumes left mouse button)
          * - s	support scroll (see below)
+         * 
          * The "support scroll" option substitutes an Opus menu for a standard Windows one, which supports showing a scrollbar for long lists. However this does not support multi-select mode.
+         * 
          * Multi-select mode allows the user to select more than one item from the menu without it closing. Only "toggle" items support this functionality:
-         * Standard toggle items can be checked on or off. Toggle items with their radio property set to true will be mutually exclusive with other radio items in the same group. Use the AddRadioGroup method to define groups.
-         * The menu will close when a non-toggle item is chosen.
-         * The return value from the Show depends on the use of the "m" multi-select flag.
-         * With single-select (the default), the return value is the ID of the chosen menu item, or -1 if the menu was cancelled. With multi-select, the return value is a MenuMultiSelResults object. This object provides the ID of the chosen item (the one that closed the menu), as well as a vector of IDs that were toggled while the menu was open.
+         * - Standard toggle items can be checked on or off. 
+         * - Toggle items with their **radio** property set to true will be mutually exclusive with other radio items in the same group. Use the **`AddRadioGroup`** method to define groups.
+         * - The menu will close when a non-toggle item is chosen.
+         * 
+         * The return value from the **Show** method depends on the use of the "m" multi-select flag.
+         * - With single-select (the default), the return value is the ID of the chosen menu item, or -1 if the menu was cancelled. 
+         * - With multi-select, the return value is a {@link MenuMultiSelResults} object. This object provides the ID of the chosen item (the one that closed the menu), as well as a vector of IDs that were toggled while the menu was open.
          */
         Show(dlg: Dialog, controlName: string, flags?: string): number | MenuMultiSelResults;
         /** Displays the popup menu. You can show the menu in three ways: 
          * - Relative to a specific dialog control, e.g. as a drop-down button or context menu on a list view (pass the dialog and control name)
          * - At a specific point relative to a dialog (pass the dialog and x / y coordinates)
          * - At a specific point on the screen (pass x / y coordinates without a dialog)
+         * 
          * To display the menu on a dialog, pass the appropriate Dialog object and either the name of a control or x,y coordinates relative to the top-left corner of the dialog's client area.
+         * 
          * If a control is specified the menu will appear positioned over that control. Special handling exists for button controls - the menu will appear positioned below it, like a drop-down menu button. For other controls the menu will appear at the mouse coordinates if the mouse is currently over that control (this lets you add right-click functionality).
-         * The optional flags are:
+         * 
+         * The optional *flags* are:
          * - a:	auto-assign accelerators
          * - b	bottom-align (above the specified point)
          * - c	center-align (centered horizontally over the specified point)
-         * - r	right-align (to the right of the specified point)
+         * - g	right-align (to the right of the specified point)
          * - v	vcenter-align (centered vertically over the specified point)
          * - m	multi-select (see below)
          * - r	right mouse button (otherwise assumes left mouse button)
          * - s	support scroll (see below)
+         * 
          * The "support scroll" option substitutes an Opus menu for a standard Windows one, which supports showing a scrollbar for long lists. However this does not support multi-select mode.
+         * 
          * Multi-select mode allows the user to select more than one item from the menu without it closing. Only "toggle" items support this functionality:
-         * Standard toggle items can be checked on or off. Toggle items with their radio property set to true will be mutually exclusive with other radio items in the same group. Use the AddRadioGroup method to define groups.
-         * The menu will close when a non-toggle item is chosen.
-         * The return value from the Show depends on the use of the "m" multi-select flag.
-         * With single-select (the default), the return value is the ID of the chosen menu item, or -1 if the menu was cancelled. With multi-select, the return value is a MenuMultiSelResults object. This object provides the ID of the chosen item (the one that closed the menu), as well as a vector of IDs that were toggled while the menu was open.
+         * - Standard toggle items can be checked on or off. 
+         * - Toggle items with their **radio** property set to true will be mutually exclusive with other radio items in the same group. Use the **`AddRadioGroup`** method to define groups.
+         * - The menu will close when a non-toggle item is chosen.
+         * 
+         * The return value from the **Show** method depends on the use of the "m" multi-select flag.
+         * - With single-select (the default), the return value is the ID of the chosen menu item, or -1 if the menu was cancelled. 
+         * - With multi-select, the return value is a {@link MenuMultiSelResults} object. This object provides the ID of the chosen item (the one that closed the menu), as well as a vector of IDs that were toggled while the menu was open.
          */
         Show(dlg: Dialog, xPos: number, yPos: number, flags?: string): number | MenuMultiSelResults;
         /** Displays the popup menu. You can show the menu in three ways: 
          * - Relative to a specific dialog control, e.g. as a drop-down button or context menu on a list view (pass the dialog and control name)
          * - At a specific point relative to a dialog (pass the dialog and x / y coordinates)
          * - At a specific point on the screen (pass x / y coordinates without a dialog)
+         * 
          * To display the menu on a dialog, pass the appropriate Dialog object and either the name of a control or x,y coordinates relative to the top-left corner of the dialog's client area.
+         * 
          * If a control is specified the menu will appear positioned over that control. Special handling exists for button controls - the menu will appear positioned below it, like a drop-down menu button. For other controls the menu will appear at the mouse coordinates if the mouse is currently over that control (this lets you add right-click functionality).
-         * The optional flags are:
+         * 
+         * The optional *flags* are:
          * - a:	auto-assign accelerators
          * - b	bottom-align (above the specified point)
          * - c	center-align (centered horizontally over the specified point)
@@ -3470,19 +3601,24 @@ declare global {
          * - m	multi-select (see below)
          * - r	right mouse button (otherwise assumes left mouse button)
          * - s	support scroll (see below)
+         * 
          * The "support scroll" option substitutes an Opus menu for a standard Windows one, which supports showing a scrollbar for long lists. However this does not support multi-select mode.
+         * 
          * Multi-select mode allows the user to select more than one item from the menu without it closing. Only "toggle" items support this functionality:
-         * Standard toggle items can be checked on or off. Toggle items with their radio property set to true will be mutually exclusive with other radio items in the same group. Use the AddRadioGroup method to define groups.
-         * The menu will close when a non-toggle item is chosen.
-         * The return value from the Show depends on the use of the "m" multi-select flag.
-         * With single-select (the default), the return value is the ID of the chosen menu item, or -1 if the menu was cancelled. With multi-select, the return value is a MenuMultiSelResults object. This object provides the ID of the chosen item (the one that closed the menu), as well as a vector of IDs that were toggled while the menu was open.
+         * - Standard toggle items can be checked on or off. 
+         * - Toggle items with their **radio** property set to true will be mutually exclusive with other radio items in the same group. Use the **`AddRadioGroup`** method to define groups.
+         * - The menu will close when a non-toggle item is chosen.
+         * 
+         * The return value from the **Show** method depends on the use of the "m" multi-select flag.
+         * - With single-select (the default), the return value is the ID of the chosen menu item, or -1 if the menu was cancelled. 
+         * - With multi-select, the return value is a {@link MenuMultiSelResults} object. This object provides the ID of the chosen item (the one that closed the menu), as well as a vector of IDs that were toggled while the menu was open.
          */
         Show(xPos: number, yPos: number, flags?: string): number | MenuMultiSelResults;
     }
 
     /** The ID of the chosen item that dismissed the menu, or -1 if the menu was cancelled. */
     interface MenuItem {
-        /** True if the item should appear in bold. The convention is that this indicates the menu's default action (the item that will be chosen if you press the Enter key). */
+        /** True if the item should appear in bold. The convention is that this indicates the menu's default action (the item that will be chosen if you press the `Enter` key). */
         bold: boolean;
         /** True if the item is checked. */
         checked: boolean;
@@ -3490,16 +3626,16 @@ declare global {
         data: number;
         /** True if the item appears disabled. */
         disabled: boolean
-        /** The numeric ID of the item. This is used in a number of Menu methods and also to identify the command chosen by the user when the menu is displayed. */
+        /** The numeric ID of the item. This is used in a number of {@link Menu} methods and also to identify the command chosen by the user when the menu is displayed. */
         id: number;
         /** The item's label. */
         label: string;
-        /** For toggle items, set this to True to make it a radio toggle. You can then assign the item to a group using the Menu.AddRadioGroup method to create sets of mutually-exclusive options. */
+        /** For toggle items, set this to True to make it a radio toggle. You can then assign the item to a group using the {@link Menu.AddRadioGroup} method to create sets of mutually-exclusive options. */
         radio: boolean;
         /** The item type. Types are "item", "toggle", "separator" and "submenu". */
         type: 'item' | 'toggle' | 'separator' | 'submenu';
         /** The sub-menu displayed by this item. */
-        submenu: boolean;
+        submenu: Menu;
     }
 
     /** The MenuMultiSelResults object is returned by the Menu.Show method when used to show a popup menu in multi-select mode. */
@@ -3512,33 +3648,33 @@ declare global {
 
     /** Returns a string indicating the primary type of metadata available in this object. The string will be one of the following: none, video, audio, image, font, exe, doc, other.   Note that sometimes more than one type of metadata will be available. For example, author is a document field (and so found under the doc property), but pictures can have authors as well. In this instance, the Metadata object would provide both ImageMeta and DocMeta objects. If the returned string is none it means that no metadata is available for the file, and you should not attempt to access any of the other properties. */
     interface Metadata {
-        /** Returns an AudioMeta object providing access to audio metadata. The properties of this object are generally returned as their appropriate underlying type (e.g. a numeric field like "track number" will be returned as an int). */
+        /** Returns an {@link AudioMeta} object providing access to audio metadata. The properties of this object are generally returned as their appropriate underlying type (e.g. a numeric field like "track number" will be returned as an *int*). */
         audio: AudioMeta;
-        /** Returns an AudioMeta object that provides access to the unmodified text form of the audio metadata. This provides access to the same text as displayed in a Lister. For example, a numeric field like "track number" would be returned as a string rather than an int. */
+        /** Returns an {@link AudioMeta} object that provides access to the unmodified text form of the audio metadata. This provides access to the same text as displayed in a Lister. For example, a numeric field like "track number" would be returned as a *string* rather than an *int*. */
         audio_text: AudioMeta;
-        /** Returns a DocMeta object providing access to document metadata. */
+        /** Returns a {@link DocMeta} object providing access to document metadata. */
         doc: DocMeta;
-        /** Returns a DocMeta object that provides access to the unmodified text form of the document metadata. */
+        /** Returns a {@link DocMeta} object that provides access to the unmodified text form of the document metadata. */
         doc_text: DocMeta;
-        /** Returns an ExeMeta object providing access to executable (program) metadata. */
+        /** Returns an {@link ExeMeta} object providing access to executable (program) metadata. */
         exe: ExeMeta;
-        /** Returns an ExeMeta object that provides access to the unmodified text form of the program metadata. */
+        /** Returns an {@link ExeMeta} object that provides access to the unmodified text form of the program metadata. */
         exe_text: ExeMeta;
-        /** Returns a FontMeta object providing access to font file metadata. */
+        /** Returns a {@link FontMeta} object providing access to font file metadata. */
         font: FontMeta;
-        /** Returns an ImageMeta object providing access to picture metadata. */
+        /** Returns an {@link ImageMeta} object providing access to picture metadata. */
         image: ImageMeta;
-        /** Returns an ImageMeta object that provides access to the unmodified text form of the picture metadata. */
+        /** Returns an {@link ImageMeta} object that provides access to the unmodified text form of the picture metadata. */
         image_text: ImageMeta;
-        /** Returns an OtherMeta object that provides access to miscellaneous metadata. */
+        /** Returns an {@link OtherMeta} object that provides access to miscellaneous metadata. */
         other: OtherMeta;
-        /** Returns a SpecialMeta object that provides access to any folder-specific properties. */
+        /** Returns a {@link SpecialMeta} object that provides access to any folder-specific properties. */
         special: SpecialMeta;
         /** Returns a collection of strings corresponding to the tags that are assigned to this item. */
         tags: string[];
-        /** Returns a VideoMeta object providing access to video metadata. */
+        /** Returns a {@link VideoMeta} object providing access to video metadata. */
         video: VideoMeta;
-        /** Returns a VideoMeta object that provides access to the unmodified text form of the video metadata. */
+        /** Returns a {@link VideoMeta} object that provides access to the unmodified text form of the video metadata. */
         video_text: VideoMeta;
         /** Default Value.
          * Returns a string indicating the primary type of metadata available in this object. The string will be one of the following: none, video, audio, image, font, exe, doc, other.
@@ -3560,9 +3696,10 @@ declare global {
 
     /** Returns True if the message is valid, or False if the dialog has been closed (which means you should exit your message loop). */
     interface Msg {
-        /** Returns a string indicating which mouse button was pressed when the message was generated. Possible values are left, right and middle. */
+        /** Returns a string indicating which mouse button was pressed when the message was generated. Possible values are **left**, **right** and **middle**. */
         buttons: string;
-        /** If the event type is checked, this indicates the check state of the item. If checkboxes are used in automatic mode, this will be the new check state of the item. In manual mode, this will indicate the existing state and it's up to you to change the state if desired. 
+        /** If the event type is **checked**, this indicates the check state of the item. If checkboxes are used in automatic mode, this will be the **new** check state of the item. In manual mode, this will indicate the **existing** state and it's up to you to change the state if desired. 
+         * 
          * Check states are:
          * - 0 : unchecked
          * - 1 : checked
@@ -3572,157 +3709,188 @@ declare global {
          * - 5 : indeterminate/disabled
         */
         checked: number;
-        /** Returns the name of the control involved in the event. You can get a Control object representing the control by passing this string to the Dialog.Control method.
+        /** Returns the name of the control involved in the event. You can get a {@link Control} object representing the control by passing this string to the {@link Dialog.Control} method.
          * - For a **timer** event this returns the name of the timer that was triggered.
          * - For a **hotkey** event this returns the name of the hotkey.
          * - For a **drop** event this returns the name of the control that the files were dropped on.
-         * - For a **tab** event this tells you which monitored tab the event occurred in (either the ID you assigned in the Dialog.WatchTab method, or the numeric handle of the tab if you didn't assign an ID).
-         * - For a **dirchange** event this tells you which watcher detected a file or folder change (the ID you assigned via the Dialog.WatchDir method).
-         * - If you have added an icon to the taskbar via the Dialog.NotifyIcon method, notifyicon indicates an event associated with that icon.
-         * - For a **http** event this tells you the ID of the HTTPRequest object.
+         * - For a **tab** event this tells you which monitored tab the event occurred in (either the ID you assigned in the {@link Dialog.WatchTab} method, or the numeric handle of the tab if you didn't assign an ID).
+         * - For a **dirchange** event this tells you which watcher detected a file or folder change (the ID you assigned via the {@link Dialog.WatchDir} method).
+         * - If you have added an icon to the taskbar via the {@link Dialog.NotifyIcon} method, notifyicon indicates an event associated with that icon.
+         * - For a **http** event this tells you the ID of the {@link HTTPRequest} object.
          * - For a **custom** message, this provides the name of the message.
          */
         control: string;
-        /** For move and resize events, this property returns the new width of the dialog.
+        /** For **move** and **resize** events, this property returns the new width of the dialog.
          * 
-         * The dialog must have `want_move` or `want_resize` set to receive these events. */
+         * The dialog must have *`want_move`* or *`want_resize`* set to receive these events. */
         cx: number;
-        /** For move and resize events, this property returns the new height of the dialog.
+        /** For **move** and **resize** events, this property returns the new height of the dialog.
          * 
-         * The dialog must have `want_move` or `want_resize` set to receive these events. */
+         * The dialog must have *`want_move`* or *`want_resize`* set to receive these events. */
         cy: number;
         /** - If the event type is **focus**, indicates the new focus state of the control - True if the control has gained the focus, or False if it's lost it.
-         * - For a combo box or list box control: If the event type is **selchange** or **dblclk**, returns the data value associated with the selected item.
-         * - For a two-state check box control or radio button: If the event type is **click**, returns a bool indicating the current check state. 
-         * - For a three-state check box: If the event type is **click**, returns an int representing the current state. 
-         * - For a date/time picker control, this value will be **true** if a valid date is selected, or **false** if the date is turned off (only applies if the "Show None" property is enabled). 
+         * - For a *combo box* or *list box* control: If the event type is **selchange** or **dblclk**, returns the data value associated with the selected item.
+         * - For a two-state *check box* control or *radio button*: If the event type is **click**, returns a *bool* indicating the current check state. 
+         * - For a three-state *check box*: If the event type is **click**, returns an *int* representing the current state. 
+         * - For a *date/time picker* control, this value will be **true** if a valid date is selected, or **false** if the date is turned off (only applies if the "Show None" property is enabled). 
          * - If the event type is **timer**, this value indicates the number of milliseconds that have elapsed since the last time this timer was triggered. 
-         * - If the event type is **tab**, and the **value** property is set to **filechange**, this indicates which file change events occurred in the monitored tab. 1 = add, 2 = delete, 4 = change. The values will be added together (so e.g. 6 indicates at least one item was changed and at least one was deleted). 
+         * - If the event type is **tab**, and the **value** property is set to **filechange**, this indicates which file change events occurred in the monitored tab. **1** = add, **2** = delete, **4** = change. The values will be added together (so e.g. **6** indicates at least one item was changed and at least one was deleted). 
          * - For a **http** event, this value contains the event status code. The **value** property provides the same information as a keyword.
-         * - For a **color** event from a palette control, this will be 0 for an intermediate color change (e.g. the user has the palette open and is clicking around within it) and 1 for final changes (when the palette window closes). 
-         * - For a **custom** message sent from another script, this may be the optional numeric parameter that can be sent with the message. Scripts can also send a container object like a Map and this will be found in the object property instead. 
-         * - For a **hash** message, this provides the request ID returned by the FSUtil.Hash method. 
-         * - For a **key** message, this provides the virtual key code of the pressed key. Virtual key codes are listed here (https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes) */
+         * - For a **color** event from a palette control, this will be **`0`** for an intermediate color change (e.g. the user has the palette open and is clicking around within it) and **1** for final changes (when the palette window closes). 
+         * - For a **custom** message sent from another script, this may be the optional numeric parameter that can be sent with the message. Scripts can also send a container object like a {@link DOpusMap|Map} and this will be found in the **object** property instead. 
+         * - For a **hash** message, this provides the request ID returned by the {@link FSUtil.Hash} method. 
+         * - For a **key** message, this provides the virtual key code of the pressed key. Virtual key codes are listed [here](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes) */
         data: number | boolean;
         /** Returns the name of the parent dialog. */
         dialog: string;
         /** Returns a string indicating the event that occurred. Currently defined events are:
-         * - checked     : For a listview control with the Checkboxes property enabled, indicates that the checkbox of a list item has been clicked.
-         * - click       : The control was clicked (e.g. a button, check box, radio button, markup text or static control with Notify Clicks property enabled). For a list edit control, the data value will be 1 for the reset button and 2 for the options button.
-         * - clipboard   : Sent whenever the system clipboard contents change, once monitoring has been enabled with the Dialog.WatchClipboard method.
-         * - close       : The user clicked the dialog's close button. Only generated if the Dialog.want_close property has been set to True. You'll need to close the dialog manually using the Dialog.EndDlg method.
-         * - color       : A new color has been chosen in a palette control.
-         * - custom      : A custom message sent from another script. The message name can be found in the name property.
-         * - datetime    : The date has changed in a date/time picker control.
-         * - dblclk      : An item in the list was double-clicked (list box, combo box or list view) or the control was double-clicked (static control with Notify Clicks property enabled).
-         * - delete      : The delete button has been clicked on an item in a list edit control.
-         * - dirchange   : A file or folder that you established monitoring of via the Dialog.WatchChanges method has changed. The control property tells you which watcher was triggered.
-         * - drag        : The user has initiated a drag and drop from a static or list view control. You can respond by calling the Dialog.Drag method. The Drag Source property must be enabled on the control for this event to be generated.
-         * - drop        : Files were dropped onto your dialog. The dialog template must have its Accept Drops property set to True to enable drag & drop support.
-         * - editchange  : The contents of an edit field were modified. For a list view this event indicates that the label of a list item was edited.
-         * - enter       : The Enter key was pushed in an edit control with the Enter property enabled).
-         * - focus       : The control gained or lost focus.
-         * - hash        : An asynchronous hash calculation requested via FSUtil.Hash has returned.
-         * - hotkey      : A key combination added as a hotkey with the Dialog.AddHotkey method has been pressed.
-         * - http        : An event associated with a HTTPRequest has occurred.
-         * - invalid     : The dialog has been closed
-         * - key         : A key was pressed in a control. Currently only supported by list view controls.
-         * - mode        : The mode has changed in a list edit control (the "edit as text" option has been changed).
-         * - move        : The dialog was moved. Only generated if the Dialog.want_move property has been set to True. Related to resize event below.
-         * - rclick      : An item in the list was right-clicked (list box, list view) or the control was right-clicked (static control with Notify Clicks property enabled, or button control with the Right Button property enabled).
-         * - push        : A button with the Arrow and Split properties both set to true will generate this message when the arrow part of the button is clicked.
-         * - resize      : The dialog was resized. Only generated if the Dialog.want_resize property has been set to True. Don't mix manual and automatic resizing with the same control: If you move or resize a control in response to this event, the control should not have any of the resize flags set in the dialog editor.
-         * - selchange   : The selection was changed (list box, combo box, list view or tab).
-         * - tab         : An event has occurred in a tab monitored using the Dialog.WatchTab method.
-         * - timer       : A periodic timer created with the Dialog.SetTimer method has elapsed. */
+         * - **checked**     : For a listview control with the ***Checkboxes*** property enabled, indicates that the checkbox of a list item has been clicked.
+         * - **click**       : The control was clicked (e.g. a button, check box, radio button, markup text or static control with ***Notify Clicks*** property enabled). For a *list edit* control, the **data** value will be `1` for the reset button and `2` for the options button.
+         * - **clipboard**   : Sent whenever the system clipboard contents change, once monitoring has been enabled with the {@link Dialog.WatchClipboard} method.
+         * - **close**       : The user clicked the dialog's close button. Only generated if the {@link Dialog.want_close} property has been set to True. You'll need to close the dialog manually using the {@link Dialog.EndDlg} method.
+         * - **color**       : A new color has been chosen in a palette control.
+         * - **custom**      : A custom message sent from another script. The message name can be found in the **name** property.
+         * - **datetime**    : The date has changed in a date/time picker control.
+         * - **dblclk**      : An item in the list was double-clicked (list box, combo box or list view) or the control was double-clicked (static control with ***Notify Clicks*** property enabled).
+         * - **delete**      : The delete button has been clicked on an item in a *list edit* control.
+         * - **dirchange**   : A file or folder that you established monitoring of via the {@link Dialog.WatchChanges} method has changed. The **control** property tells you which watcher was triggered.
+         * - **drag**        : The user has initiated a drag and drop from a static or list view control. You can respond by calling the {@link Dialog.Drag} method. The ***Drag Source*** property must be enabled on the control for this event to be generated.
+         * - **drop**        : Files were dropped onto your dialog. The dialog template must have its ***Accept Drops*** property set to True to enable drag & drop support.
+         * - **editchange**  : The contents of an edit field were modified. For a list view this event indicates that the label of a list item was edited.
+         * - **enter**       : The Enter key was pushed in an *edit* control with the ***Enter*** property enabled).
+         * - **focus**       : The control gained or lost focus.
+         * - **hash**        : An asynchronous hash calculation requested via {@link FSUtil.Hash} has returned.
+         * - **hotkey**      : A key combination added as a hotkey with the {@link Dialog.AddHotkey} method has been pressed.
+         * - **http**        : An event associated with a {@link HTTPRequest} has occurred.
+         * - **invalid**     : The dialog has been closed
+         * - **key**         : A key was pressed in a control. Currently only supported by list view controls.
+         * - **mode**        : The mode has changed in a *list edit* control (the "edit as text" option has been changed).
+         * - **move**        : The dialog was moved. Only generated if the {@link Dialog.want_move} property has been set to True. Related to **resize** event below.
+         * - **rclick**      : An item in the list was right-clicked (list box, list view) or the control was right-clicked (static control with ***Dialog.NotifyClicks*** property enabled, or button control with the ***RightButton*** property enabled).
+         * - **push**        : A button with the **Arrow** and **Split** properties both set to true will generate this message when the arrow part of the button is clicked.
+         * - **resize**      : The dialog was resized. Only generated if the {@link Dialog.want_resize} property has been set to True. Don't mix manual and automatic resizing with the same control: If you move or resize a control in response to this event, the control should not have any of the **resize** flags set in the dialog editor.
+         * - **selchange**   : The selection was changed (list box, combo box, list view or tab).
+         * - **tab**         : An event has occurred in a tab monitored using the {@link Dialog.WatchTab} method.
+         * - **timer**       : A periodic timer created with the {@link Dialog.SetTimer} method has elapsed. */
         event: string;
         /** Returns True if the control had focus when the message was generated. */
         focus: boolean;
-        /** Returns the current selection index for a combo box, list box or tab control. */
+        /** Returns the current selection index for a *combo box*, *list box* or *tab* control. */
         index: number;
         /** Returns the horizontal position of the mouse cursor when the message was generated. */
         mousex: number;
         /** Returns the vertical position of the mouse cursor when the message was generated. */
         mousey: number;
-        /** An alias for the control property. */
+        /** An alias for the **control** property. */
         name: string;
-        /** For a drop event, this property returns a Vector of Item objects, representing the files that were dropped onto your dialog. For a custom message sent from another script, this may be the optional container object (e.g. a Map) that can be sent with the message. Scripts can also send a numeric parameter and this will be found in the data property instead. For a date/time picker control, this property returns a {@link DOpusDate|Date} object when a new valid date is chosen. For a hash message this returns the calculated hash value; it will either be a string, or a Vector of strings, depending on how many hash methods were requested in the call to FSUtil.Hash. */
+        /** For a **drop** event, this property returns a {@link Vector} of {@link Item} objects, representing the files that were dropped onto your dialog. 
+         * 
+         * For a **custom** message sent from another script, this may be the optional container object (e.g. a {@link DOpusMap|Map}) that can be sent with the message. Scripts can also send a numeric parameter and this will be found in the **data** property instead. 
+         * 
+         * For a date/time picker control, this property returns a {@link DOpusDate|Date} object when a new valid date is chosen. 
+         * 
+         * For a **hash** message this returns the calculated hash value; it will either be a string, or a {@link Vector} of strings, depending on how many hash methods were requested in the call to {@link FSUtil.Hash}. */
         object: any;
-        /** Returns a string indicating the qualifier keys (if any) that were held down when the message was generated. The string can contain any or all of the following: shift, ctrl, alt, lwin, rwin If no qualifiers were down, the string will be: none */
+        /** Returns a string indicating the qualifier keys (if any) that were held down when the message was generated. 
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*
+         * 
+         * If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
         /** Returns True if the message is valid, or False if the dialog has been closed. */
         result: boolean;
-        /** Returns the subitem (column) number for listview controls with rclick and dblclk events. */
+        /** Returns the subitem (column) number for listview controls with **rclick** and **dblclk** events. */
         subitem: number;
-        /** For a dialog tab control, returns the name of the parent tab (if the control is on a dialog that's inside a tab control). If the event type is tab, this returns a Tab object representing the monitored tab that the event occurred in. Calling this repeatedly may be inefficient. */
+        /** For a dialog tab control, returns the name of the parent tab (if the control is on a dialog that's inside a tab control). 
+         * 
+         * If the event type is **tab**, this returns a {@link Tab} object representing the monitored tab that the event occurred in. Calling this repeatedly may be inefficient. */
         tab: string;
-        /** For the dblclk, editchange and selchange events, returns the current contents of the edit field (or selected item label). For the tab event, indicates which event occurred in the monitored tab. Possible values are select, navigate, filechange, activate, srcdst, view, flat, and close (sent if the tab is closed while you are monitoring it). For the drag event, this indicates which button is being used to drag (left or right). For a click event from a markup text control, this indicates the ID of the clicked link. For a http event, this indicates the current http status code. For a color event from a palette control, this will be the selected color as either a hex or decimal string (depending on the control property). If the palette button's checkbox is disabled, this will be prefixed by a ! character. For a date/time picker control, this returns the textual value of the selected date or time. The object property returns a {@link DOpusDate|Date} object, which may be more useful. For a key message this provides the pressed key in text form (e.g. "space"). */
+        /** - For the **dblclk**, **editchange** and **selchange** events, returns the current contents of the edit field (or selected item label). 
+         * - For the **tab** event, indicates which event occurred in the monitored tab. Possible values are **select**, **navigate**, **filechange**, **activate**, **srcdst**, **view**, **flat**, and **close** (sent if the tab is closed while you are monitoring it). 
+         * - For the **drag** event, this indicates which button is being used to drag (**left** or **right**). 
+         * - For a **click** event from a markup text control, this indicates the ID of the clicked link. 
+         * - For a **http** event, this indicates the current http status code. 
+         * - For a **color** event from a palette control, this will be the selected color as either a hex or decimal string (depending on the control property). If the palette button's checkbox is disabled, this will be prefixed by a `**!**` character. 
+         * - For a **date/time** picker control, this returns the textual value of the selected date or time. The `object` property returns a {@link DOpusDate|Date} object, which may be more useful. 
+         * - For a **key** message this provides the pressed key in text form (e.g. "space"). */
         value: string;
-        /** For move and resize events, this property returns the new x position of the dialog. May be negative on multi-monitor systems.    The dialog must have want_move or want_resize set to receive these events. */
+        /** For **move** and **resize** events, this property returns the new x position of the dialog. May be negative on multi-monitor systems.
+         * 
+         * The dialog must have `want_move` or `want_resize` set to receive these events. */
         x: number;
-        /** For move resize events, this property returns the new y position of the dialog. May be negative on multi-monitor systems.    The dialog must have want_move or want_resize set to receive these events. */
+        /** For **move** and **resize** events, this property returns the new y position of the dialog. May be negative on multi-monitor systems.
+         * 
+         * The dialog must have `want_move` or `want_resize` set to receive these events. */
         y: number;
     }
 
     interface OpenListerData {
-        /** Initially this is set to False, indicating that the event has been called before any tabs have been created. If you return True from the OnOpenLister event, it will be called again and after will be set to True to indicate all tabs have been created. */
+        /** Initially this is set to False, indicating that the event has been called before any tabs have been created. If you return True from the {@link OpusOnOpenLister|OnOpenLister} event, it will be called again and **after** will be set to True to indicate all tabs have been created. */
         after: boolean;
-        /** Returns a Lister object representing the newly opened Lister. */
+        /** Returns a {@link Lister} object representing the newly opened Lister. */
         lister: Lister;
-        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  The string can contain any or all of the following: shift ctrl, alt, lwin, rwin  If no qualifiers were down, the string will be: none */
+        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*
+         * 
+         *   If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
     }
 
     interface OpenTabData {
-        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  The string can contain any or all of the following: shift ctrl, alt, lwin, rwin  If no qualifiers were down, the string will be: none */
+        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*
+         * 
+         * If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
-        /** Returns a Tab object representing the newly opened tab. */
+        /** Returns a {@link Tab} object representing the newly opened tab. */
         tab: Tab;
     }
 
     interface OtherMeta {
         /** An automatically generated description string for the item. This is the same string that is shown in the Description column in a Lister. Opus automatically generates the description for various types of files using the other metadata in ways that make the most sense. */
         autodesc: string;
-        /** For a folder, the size of which has been calculated via GetSizes or similar, this provides the number of sub-folders directly underneath the folder. */
+        /** For a folder, the size of which has been calculated via `GetSizes` or similar, this provides the number of sub-folders directly underneath the folder. */
         dircount: number;
-        /** Similar to dircount, this provides the total number of sub-folders underneath the folder (this is a recursive count - it includes sub-sub-folders, sub-sub-sub-folders, etc.) */
+        /** Similar to **dircount**, this provides the total number of sub-folders underneath the folder (this is a recursive count - it includes sub-sub-folders, sub-sub-sub-folders, etc.) */
         dircounttotal: number;
-        /** For a folder, the size of which has been calculated via GetSizes or similar, this provides the number of files directly located in that folder. */
+        /** For a folder, the size of which has been calculated via `GetSizes` or similar, this provides the number of files directly located in that folder. */
         filecount: number;
-        /** Similar to filecount, this provides the total number of files in the folder and all its sub-folders, sub-sub-folders, etc. */
+        /** Similar to **filecount**, this provides the total number of files in the folder and all its sub-folders, sub-sub-folders, etc. */
         filecounttotal: number;
-        /** For a folder, the size of which has been calculated via GetSizes or similar, this returns a string giving a summary of the contents of the folder. */
+        /** For a folder, the size of which has been calculated via `GetSizes` or similar, this returns a string giving a summary of the contents of the folder. */
         foldercontents: string;
         /** A description automatically generated for the item by its parent virtual file system. */
         nsdesc: string;
         /** Returns the user-assigned rating for this file or folder. */
         rating: number;
-        /** Returns a Path object representing the target path of shortcuts and links. */
+        /** Returns a {@link Path} object representing the target path of shortcuts and links. */
         target: Path;
-        /** Returns a string indicating the type of the link (unknown, linkfile, dosfile, url, junction, softlink). */
+        /** Returns a *string* indicating the type of the link (*unknown*, *linkfile*, *dosfile*, *url*, *junction*, *softlink*). */
         target_type: string;
         /** Returns the user-assigned description for the file or folder. */
         usercomment: string;
     }
 
     interface PairedFolder {
-        /** Returns True if the Default dual display folder option is on for the pair. */
+        /** Returns True if the *Default dual display folder* option is on for the pair. */
         dual: boolean;
-        /** Returns True if the Default Navigation Lock target option is on for the pair. */
+        /** Returns True if the *Default Navigation Lock target* option is on for the pair. */
         dualnavlock: boolean;
-        /** Returns a string indicating the setting of the If non-existent option. Valid values are gotoparent, ignorepair and useanyway. */
+        /** Returns a string indicating the setting of the *If non-existent* option. Valid values are **gotoparent**, **ignorepair** and **useanyway**. */
         ifnonexistent: string;
-        /** Returns True if the Turn on Navigation Lock automatically option is on for the pair. */
+        /** Returns True if the *Turn on Navigation Lock automatically* option is on for the pair. */
         navlock: boolean;
-        /** If the initial paired folder didn't exist and so the returned path is a parent folder (as a result of the If non-existent option), this property tells you how many levels above the initial pair the returned folder is. */
+        /** If the initial paired folder didn't exist and so the returned path is a parent folder (as a result of the *If non-existent* option), this property tells you how many levels above the initial pair the returned folder is. */
         parent_level: number;
-        /** Returns a Path object which provides the paired folder. */
+        /** Returns a {@link Path} object which provides the paired folder. */
         path: Path;
-        /** Returns True if the Always display primary folder at the left/top option is turned on. */
+        /** Returns True if the *Always display primary folder at the left/top* option is turned on. */
         primaryonleft: boolean;
-        /** Returns True if Default Synchronize target is turned on for the pair. */
+        /** Returns True if the *Default Synchronize target* option is turned on for the pair. */
         sync: boolean;
-        /** Returns True if the Apply Settings to all sub-folders option is on. */
+        /** Returns True if the *Apply Settings to all sub-folders* option is on. */
         subfolders: boolean;
         /** Returns True if the paired folder is valid. */
         valid: boolean;
@@ -3732,13 +3900,17 @@ declare global {
     interface Path {
         /** Returns the number of components in the path. */
         components: number;
-        /** Returns a Vector of ints representing the physical disk drive or drives that this path resides on. */
+        /** Returns a {@link Vector} of *int* representing the physical disk drive or drives that this path resides on. */
         disks: Vector<number>;
         /** Returns the drive number the path refers to (1=A, 2=B, etc.) or 0 if the path does not specify a drive. You can also change the drive letter of the path (while leaving the following path components alone) by modifying this value. */
         drive: number;
-        /** Returns the filename extension of the path (the sub-string extending from the last . in the final component to the end of the string). This method does not check if the path actually refers to a file. You can also change a path's file extension by setting this property (and strip the extension altogether by setting it to an empty string). */
+        /** Returns the filename extension of the path (the sub-string extending from the last `.` in the final component to the end of the string). This method does not check if the path actually refers to a file. 
+         * 
+         * You can also change a path's file extension by setting this property (and strip the extension altogether by setting it to an empty string). */
         ext: string;
-        /** Returns the filename extension of the path, taking multi-part extensions into account. For example, ext might return ".rar" whereas ext_m would return ".part1.rar". You can't change the extension using ext_m, only ext. */
+        /** Returns the filename extension of the path, taking multi-part extensions into account. For example, **ext** might return ".rar" whereas **ext_m** would return ".part1.rar". 
+         * 
+         * You can't change the extension using ext_m, only ext. */
         ext_m: string;
         /** Returns the filename part of the path (the last component). */
         filepart: string;
@@ -3748,54 +3920,56 @@ declare global {
         pathpart: string;
         /** If this object represents a long pathname, this property returns the "short" equivalent, if it has one. Note that short paths are disabled by default in Windows 10. */
         shortpath: Path;
-        /** Returns the filename stem of the path (i.e. filepart minus ext). */
+        /** Returns the filename stem of the path (i.e. **filepart** minus **ext**). */
         stem: string;
-        /** Returns the filename stem taking multi-part extensions into account. For example, stem might return "pictures.part1" whereas stem_m would return "pictures". */
+        /** Returns the filename stem taking multi-part extensions into account. For example, **stem** might return "pictures.part1" whereas **stem_m** would return "pictures". */
         stem_m: string;
-        /** Returns True if a call to the Parent method would succeed. */
+        /** Returns True if a call to the {@link Parent} method would succeed. */
         test_parent: boolean;
-        /** Returns True if a call to the Root method would succeed. */
+        /** Returns True if a call to the {@link Root} method would succeed. */
         test_root: boolean;
-        /** Adds the specified name to the path (it will become the last component). As well as a string, you can pass a Vector of strings and all items in the vector will be added to the path. */
+        /** Adds the specified name to the path (it will become the last component). As well as a string, you can pass a {@link Vector} of strings and all items in the vector will be added to the path. */
         Add(name: string | Vector<string>): void;
-        /** Returns a Drive object for the path, or false if the path doesn't contain a drive letter. */
+        /** Returns a {@link Drive} object for the path, or `false` if the path doesn't contain a drive letter. */
         GetDrive(): Drive | boolean;
         /** Normalizes the path by:
          * - Converting all forward-slashes to back-slashes (or vice versa for a URL)
          * - Collapsing duplicate slashes to a single slash (except where needed)
          * 
-         * Normalize is automatically called when a new path string is assigned to a Path object so you don't normally need to call it manually. */
+         * **Normalize** is automatically called when a new path string is assigned to a **Path** object so you don't normally need to call it manually. */
         Normalize(): void;
         /** Removes the last component of the path. Returns False if the path does not have a valid parent. */
         Parent(): boolean;
-        /** Compares the beginning of the path with the "old" string, and if it matches replaces it with the "new" string. The match is performed at the path component level - for example, an "old" string of "C:\Foo" would match the path "C:\Foo\Bar" but not "C:\FooBar". If the optional wholepath argument is set to True then the whole path must match rather than just its beginning. Returns True if the string matched the path or False otherwise. */
+        /** Compares the beginning of the path with the "old" string, and if it matches replaces it with the "new" string. The match is performed at the path component level - for example, an "old" string of "C:\Foo" would match the path "C:\Foo\Bar" but not "C:\FooBar". If the optional *wholepath* argument is set to True then the whole path must match rather than just its beginning. Returns True if the string matched the path or False otherwise. */
         ReplaceStart(oldStart: string, newStart: string, wholepath?: boolean): boolean;
         /** Resolves the specified path string to its real filesystem path, with support for converting:
-         * - Folder Aliases to the real paths they point to.
-         * - Library and File Collection items to their real filesystem paths.
-         * - Application paths in the {apppath|appname} form.
+         * - **Folder Aliases** to the real paths they point to.
+         * - **Library** and **File Collection** items to their real filesystem paths.
+         * - Application paths in the **{apppath|*appname*}** form.
          * - Environment variables.
-         * - Optionally, junctions and symbolic links can be resolved to their targets.The Path object is modified in-place.
+         * - Optionally, **junctions** and **symbolic links** can be resolved to their targets.The {@link Path} object is modified in-place.
          * 
          * It is safe to pass a path which does not need resolving; the path will remain as-is, so you can call this on things without checking if it is needed first. 
          * 
-         * Scripts which pass the current directory to external software should generally call Resolve on the path first, otherwise they risk passing aliases like /desktop to things which won't understand them. 
+         * Scripts which pass the current directory to external software should generally call Resolve on the path first, otherwise they risk passing aliases like *\/desktop* to things which won't understand them. 
          * 
-         * The optional flags string can include the following letter (not case-sensitive):
+         * The optional **flags** string can include the following letter (not case-sensitive):
          * - j : resolve junctions and symbolic links to their target folder
          * 
-         * Note that DOpus.FSUtil has a similar Resolve method which takes a string input and returns a new Path object. */
+         * Note that {@link DOpus.FSUtil} has a similar **Resolve** method which takes a string input and returns a new **Path** object. */
         Resolve(flags: string): void;
         /** Strips off all but the first component of the path. Returns False if the path is already at the root. */
         Root(): boolean;
-        /** Sets the path represented by the Path object to the specified string. 
+        /** Sets the path represented by the **Path** object to the specified *string*. 
          * 
-         * You can also set one Path object to the value of another.
-         * If you pass a Vector of strings the path will be built from the items in the vector. */
+         * You can also set one **Path** object to the value of another.
+         * If you pass a {@link Vector} of strings the path will be built from the items in the vector. */
         Set(path: string | Path | Vector<string>): void;
-        /** Returns a Vector of strings representing the components of the path. For example, if the path is C:\Foo\Bar, the vector will contain three items - "C:\", "Foo" and "Bar". By default all components of the path are returned, but you can optionally provide the index of the first component and also the number of components to return. */
+        /** Returns a {@link Vector} of strings representing the components of the path. For example, if the path is **`C:\Foo\Bar`**, the vector will contain three items - **`"C:\"`**, **`"Foo"`**, and **`"Bar"`**. By default all components of the path are returned, but you can optionally provide the index of the first component and also the number of components to return. */
         Split(first: number, count: number): Vector<string>;
-        /** If the path begins with the drive letter of a mapped network drive, it will be converted into the UNC version of the path. For example, "X:\Test" may map to "\\Server\Share\Test". Returns True if the path was modified and False if it was not. */
+        /** If the path begins with the drive letter of a mapped network drive, it will be converted into the UNC version of the path. For example, **`"X:\Test"`** may map to **`"\\Server\Share\Test"`**. 
+         * 
+         * Returns True if the path was modified and False if it was not. */
         ToUNC(): boolean;
     }
 
@@ -3808,69 +3982,80 @@ declare global {
     interface PermanentFilters {
         /** Returns True if the permanent wildcard filters are enabled. */
         enable: boolean;
-        /** Returns the permanent filename filter wildcard pattern. If the wildcard is configured to use regular expressions, it will have a regex: prefix in front of the pattern. */
+        /** Returns the permanent filename filter wildcard pattern. If the wildcard is configured to use regular expressions, it will have a **regex:** prefix in front of the pattern. */
         file: string;
-        /** Returns the permanent folder filter wildcard pattern. If the wildcard is configured to use regular expressions, it will have a regex: prefix in front of the pattern. */
+        /** Returns the permanent folder filter wildcard pattern. If the wildcard is configured to use regular expressions, it will have a **regex:** prefix in front of the pattern. */
         folder: string;
     }
 
     interface PowerEventData {
-        /** Returns data for this event. The meaning of this property varies depending on the value of the type property. */
+        /** Returns data for this event. The meaning of this property varies depending on the value of the **type** property. */
         data: string;
         /** Returns the power event type. Possible events are:
-         * - battery     : The remaining battery capacity has changed. The current battery capacity is provided in the data property.
-         * - display     : The display state has changed. The data property will equal "on", "dimmed" or "off".
+         * - battery     : The remaining battery capacity has changed. The current battery capacity is provided in the `data` property.
+         * - display     : The display state has changed. The `data` property will equal "*on*", "*dimmed*" or "*off*".
          * - resume      : The system has resumed from sleep or hibernation.
-         * - saver       : Battery saver mode state has changed. The data property will equal "on" or "off".
-         * - source      : The power source has changed. The data property will equal "battery", "ups" or "ac".
+         * - saver       : Battery saver mode state has changed. The `data` property will equal "*on*" or "*off*".
+         * - source      : The power source has changed. The `data` property will equal "*battery*", "*ups*" or "*ac*".
          * - suspend     : The system is about to enter sleep or hibernation.
         */
         type: string;
     }
 
     interface Progress {
-        /** Before calling Init, set to True if the Abort button should be available, or False to disable it. */
+        /** Before calling **Init**, set to True if the *Abort* button should be available, or False to disable it. */
         abort: boolean;
-        /** Before calling Init, set to True if the dialog should show progress in bytes rather than whole files. */
+        /** Before calling **Init**, set to True if the dialog should show progress in bytes rather than whole files. */
         bytes: boolean;
-        /** Before calling Init, set to True if the dialog should delay before appearing after the Show method is called. The delay is configured by the user in Preferences. */
+        /** Before calling **Init**, set to True if the dialog should delay before appearing after the **Show** method is called. The delay is configured by the user in Preferences. */
         delay: boolean;
-        /** Before calling Init, set to True to enable a "full size" progress indicator with two separate progress bars (one for files and one for bytes). */
+        /** Before calling **Init**, set to True to enable a "full size" progress indicator with two separate progress bars (one for files and one for bytes). */
         full: boolean;
-        /** Before calling Init, set to True if the dialog should be owned by its parent window (the parent is given later, when the dialog is created via the Init method). */
+        /** Before calling **Init**, set to True if the dialog should be owned by its parent window (the parent is given later, when the dialog is created via the **Init** method). */
         owned: boolean;
-        /** Before calling Init, set to True if the Pause button should be available. */
+        /** Before calling **Init**, set to True if the *Pause* button should be available. */
         pause: boolean;
-        /** Before calling Init, set to True if the Skip button should be available. (This just makes it so the Skip button can be enabled. You must still call EnableSkip later to actually enable it; usually once per file.) */
+        /** Before calling **Init**, set to True if the *Skip* button should be available. (This just makes it so the *Skip* button can be enabled. You must still call **EnableSkip** later to actually enable it; usually once per file.) */
         skip: boolean;
-        /** Adds the specified number of files to the operation total. The bytes argument is optional - in a "full size" progress indicator this lets you add to the total byte size of the operation. */
+
+        /** Adds the specified number of files to the operation total. The *bytes* argument is optional - in a "full size" progress indicator this lets you add to the total byte size of the operation. */
         AddFiles(count: number, bytes: FileSize): void;
-        /** Clears the state of the three "control" buttons (Abort / Pause / Skip) so they no longer register as being clicked when GetAbortState is called.  If you only want to clear the Skip state, you should normally do that as part of a call to EnableSkip instead. That way you avoid accidentally clearing one of the other states if they become set between you calling GetAbortState and ClearAbortState. In fact, there are very few situations where you should call ClearAbortState. */
+        /** Clears the state of the three "control" buttons (*Abort* / *Pause* / *Skip*) so they no longer register as being clicked when **GetAbortState** is called.  
+         * 
+         * If you only want to clear the *Skip* state, you should normally do that as part of a call to **EnableSkip** instead. That way you avoid accidentally clearing one of the other states if they become set between you calling **GetAbortState** and **ClearAbortState**. In fact, there are very few situations where you should call **ClearAbortState**. */
         ClearAbortState(): void;
-        /** Enables the progress dialog's Skip button. For EnableSkip to work, you must have set the skip property to True before the progress dialog was created by the Init method.  enable: If True, the Skip button should be enabled; otherwise, it should be disabled.  delay (optional, True by default): If True, there will be a short delay before the Skip button is enabled, with it temporarily disabled during the delay; otherwise, the change is instant. See below for why a delay is usually a good idea.  clear (optional, True by default): If True, any record of the user pushing the Skip will be cleared, such that GetAbortState no longer returns "s". You usually want this if the progress dialog just moved to a new item.  If you support the Skip button, you should normally call EnableSkip once per file, just after you call SetName and similar methods. When used that way, you'll usually want delay and clear to both be True, otherwise clicks of the Skip button intended for one file could affect the file(s) that come after it. For example, if a file takes a long time but then finishes just as the user gets tired of waiting and clicks Skip, the delay and cleared state ensure the unwanted click is harmless. */
+        /** Enables the progress dialog's *Skip* button. For **EnableSkip** to work, you must have set the **skip** property to True before the progress dialog was created by the **Init** method.  
+         * - **enable**: If True, the *Skip* button should be enabled; otherwise, it should be disabled.  
+         * - **delay** (optional, True by default): If True, there will be a short delay before the *Skip* button is enabled, with it temporarily disabled during the delay; otherwise, the change is instant. See below for why a delay is usually a good idea.  
+         * - **clear** (optional, True by default): If True, any record of the user pushing the *Skip* button will be cleared, such that **GetAbortState** no longer returns "**s**". You usually want this if the progress dialog just moved to a new item.  
+         * 
+         * If you support the *Skip* button, you should normally call **EnableSkip** once per file, just after you call **SetName** and similar methods. When used that way, you'll usually want **delay** and **clear** to both be True, otherwise clicks of the *Skip* button intended for one file could affect the file(s) that come after it. For example, if a file takes a long time but then finishes just as the user gets tired of waiting and clicks *Skip*, the delay and cleared state ensure the unwanted click is harmless. */
         EnableSkip(enable: boolean, delay: boolean, clear: boolean): void;
         /** Finish the current file. If the byte size of the current file has been set the total progress will be advanced by any remaining bytes. */
         FinishFile(): void;
-        /** Polls the state of the three "control" buttons. This returns a string that indicates which, if any, of the three buttons have been clicked by the user. The button states are represented by the following letters in the returned string:
+        /** Polls the state of the three "control" buttons. This returns a *string* that indicates which, if any, of the three buttons have been clicked by the user. The button states are represented by the following letters in the returned string:
          * - a : Abort
          * - p : Pause
          * - s : Skip 
+         * - If none of the states apply, an empty string is returned.
          * 
-         * If none of the states apply, an empty string is returned.
+         * Parameters:
+         * - **autoPause** (optional, False by default): If True, pausing is handled for you automatically. Calls to **`GetAbortState(True)`** block while paused and don't return until unpaused; the "**p**" state is never returned. (Note that clicking *Skip* or *Abort* will implicitly unpause the operation.)  
+         * - **wanted** (optional): If you only want to check one or two of the states, pass a string with their letters. For example, **`GetAbortState(True,"ap")`** will test for the *Abort* and *Pause* states, but not the *Skip* one. All states will be checked if the argument is an empty string or not given at all.  
+         * - **simple** (optional, True by default): If True, the result string will have at most one letter, indicating the most important state. If False, it is possible for multiple states to be indicated at once. For example if *Skip* and then *Pause* are clicked, in that order, without the script clearing the *Skip* state, then **`GetAbortState(False,"",False)`** would return "**ps**" while **`GetAbortState(False)`** would return just "**p**".  
          * 
-         * **autoPause** (optional, False by default): If True, pausing is handled for you automatically. Calls to `GetAbortState(True)` block while paused and don't return until unpaused; the "p" state is never returned. (Note that clicking Skip or Abort will implicitly unpause the operation.)  
-         * 
-         * **wanted** (optional): If you only want to check one or two of the states, pass a string with their letters. For example, `GetAbortState(True,"ap")` will test for the Abort and Pause states, but not the Skip one. All states will be checked if the argument is an empty string or not given at all.  
-         * 
-         * **simple** (optional, True by default): If True, the result string will have at most one letter, indicating the most important state. If False, it is possible for multiple states to be indicated at once. For example if Skip and then Pause are clicked, in that order, without the script clearing the Skip state, then `GetAbortState(False,"",False)` would return "ps" while `GetAbortState(False)` would return just "p".  To clear the state of the three buttons, call the `ClearAbortState` method. 
-         * 
-         * To clear just the Skip button's state, use the `EnableSkip` method. */
+         * To clear the state of the three buttons, call the `ClearAbortState` method. To clear just the *Skip* button's state, use the `EnableSkip` method.
+        */
         GetAbortState(autoPause: boolean, wanted: string, simple: boolean): string;
-        /** Hides the progress indicator dialog. The dialog object itself remains valid, and can be redisplayed with the Show method if desired. */
+        /** Hides the progress indicator dialog. The dialog object itself remains valid, and can be redisplayed with the **Show** method if desired. */
         Hide(): void;
-        /** Hides or shows the "XX bytes / YY bytes" string in the progress dialog. You can use this to hide the string if the progress does not indicate a number of bytes (e.g. when it indicates a percentage). Pass True for the show argument to show the string and False to hide it. */
+        /** Hides or shows the "*XX bytes / YY bytes*" string in the progress dialog. You can use this to hide the string if the progress does not indicate a number of bytes (e.g. when it indicates a percentage). Pass True for the show argument to show the string and False to hide it. */
         HideFileByteCounts(show: boolean): void;
-        /** Initializes the dialog. This method causes the actual dialog to be created, although it will not be displayed until the Show method is called. The fundamental properties shown above must be set before this method is called - once the dialog has been created they can not be altered.  The parent parameter can be either a Tab or a Lister - this controls which window the dialog is centered over, and if the owned property is set to True which window it is owned by (always appears on top of). If no parent is provided the dialog will not be associated with any particular window.  The title parameter specifies the window title of the dialog. */
+        /** Initializes the dialog. This method causes the actual dialog to be created, although it will not be displayed until the **Show** method is called. The fundamental properties shown above must be set before this method is called - once the dialog has been created they can not be altered.  
+         * 
+         * The *parent* parameter can be either a {@link Tab} or a {@link Lister} - this controls which window the dialog is centered over, and if the **owned** property is set to True which window it is owned by (always appears on top of). If no parent is provided the dialog will not be associated with any particular window.  
+         * 
+         * The *title* parameter specifies the window title of the dialog. */
         Init(parent: Tab | Lister, title: string): void;
         /** Resets the byte count for the current file to zero. */
         InitFileSize(): void;
@@ -3884,19 +4069,22 @@ declare global {
         SetFiles(count: number): void;
         /** Sets the total completed file count. */
         SetFilesProgress(count: number): void;
-        /** Sets the text at the top of the dialog that indicates the source and destination of an operation. The header argument refers to the string that normally says From: - this allows you to change it in case that term is not applicable to your action. The from argument is the source path, and the to argument (if there is one) is the destination path. Note that if you specify a destination path this always has a To: header appended to it.  If you omit the to argument entirely (not just passing an empty string), the destination line will become blank, including the To: header. Use that if you want the second line to be used sometimes but not always. If you never want anything on the second line, use the SetStatus method instead as it will not add space for the extra line. */
+        /** Sets the text at the top of the dialog that indicates the source and destination of an operation. 
+         * - The *header* argument refers to the string that normally says *From:* - this allows you to change it in case that term is not applicable to your action. 
+         * - The *from* argument is the source path, and the to argument (if there is one) is the destination path. Note that if you specify a destination path this always has a *To:* header appended to it.  
+         * - If you omit the *to* argument entirely (not just passing an empty string), the destination line will become blank, including the *To:* header. Use that if you want the second line to be used sometimes but not always. If you never want anything on the second line, use the **SetStatus** method instead as it will not add space for the extra line. */
         SetFromTo(header: string, from: string, to: string): void;
         /** Sets the name of the current file. */
         SetName(name: string): void;
         /** Sets the current progress as a percentage (from 0 to 100). */
         SetPercentProgress(percent: number): void;
-        /** Sets the text displayed in the status line at the top of the dialog.  This sets a single-line status message, while SetFromTo can be used to indicate source and destination paths on two lines. */
+        /** Sets the text displayed in the status line at the top of the dialog.  This sets a single-line status message, while **SetFromTo** can be used to indicate source and destination paths on two lines. */
         SetStatus(status: string): void;
         /** Sets the title of the dialog. */
         SetTitle(title: string): void;
-        /** Sets the type of the current item - either file or dir. */
+        /** Sets the type of the current item - either *file* or *dir*. */
         SetType(type: string): void;
-        /** Displays the progress indicator dialog. Call this once you have created the dialog using the Init method. */
+        /** Displays the progress indicator dialog. Call this once you have created the dialog using the **Init** method. */
         Show(): void;
         /** Skips over the current file. Set the complete argument to True to have the file counted as "complete", or False to count it as "skipped". */
         SkipFile(complete: boolean): void;
@@ -3924,7 +4112,7 @@ declare global {
         hidealldirs: boolean;
         /** Returns True if all files are being hidden. */
         hideallfiles: boolean;
-        /** (Legacy flag.) Returns True if folder filtering in flatview is overrriden. Use the flatview flag to find out if it is actually on or off. */
+        /** (Legacy flag.) Returns True if folder filtering in flatview is overrriden. Use the **flatview** flag to find out if it is actually on or off. */
         overrideflatview: boolean;
         /** Returns True if partial matching is enabled. */
         partial: boolean;
@@ -3949,7 +4137,7 @@ declare global {
     }
 
     interface QuickFilterChangeData {
-        /** Returns a Tab object representing the tab the quick filter changed in. */
+        /** Returns a {@link Tab} object representing the tab the quick filter changed in. */
         tab: Tab;
     }
 
@@ -3960,37 +4148,51 @@ declare global {
         left: number;
         /** Returns the top edge of the rectangle. */
         top: number;
-        /** Returns the right edge of the rectangle.  Note that this value is actually 1 outside the right edge. A rectangle includes everything from and including the left edge up to but excluding the right edge.  A rectangle at position 0,7 with 0 width will have left=0 and right=0. The same but with a width of 1 will have left=0 and right=1, and so on. */
+        /** Returns the right edge of the rectangle.  
+         * 
+         * Note that this value is actually 1 outside the right edge. A rectangle includes everything from and including the left edge up to but excluding the right edge.  
+         * 
+         * A rectangle at position 0,7 with 0 width will have left=0 and right=0. The same but with a width of 1 will have left=0 and right=1, and so on. */
         right: number;
-        /** Returns the bottom edge of the rectangle.  Note that this value is actually 1 outside the right edge. A rectangle includes everything from and including the top edge up to but excluding the bottom edge.  A rectangle at position 0,7 with 0 height will have top=7 and bottom=7. The same but with a height of 10 will have top=7 and bottom=17, and so on. */
+        /** Returns the bottom edge of the rectangle.  
+         * 
+         * Note that this value is actually 1 outside the right edge. A rectangle includes everything from and including the top edge up to but excluding the bottom edge.  
+         * 
+         * A rectangle at position 0,7 with 0 height will have top=7 and bottom=7. The same but with a height of 10 will have top=7 and bottom=17, and so on. */
         bottom: number;
-        /** Returns the width of the rectangle. Equal to right-left. */
+        /** Returns the width of the rectangle. Equal to **right-left**. */
         width: number;
-        /** Returns the height of the rectangle. Equal to bottom-top. */
+        /** Returns the height of the rectangle. Equal to **bottom-top**. */
         height: number;
         /** Returns a string describing the rectangle's position and size, as a convenience when debugging scripts. The format is "(L,T - R,B; WxH)" i.e. Left, Top, Right, Bottom, Width, and Height. */
         ToString(): string;
     }
 
     interface Results {
-        /** This property returns a FileChange[] objects representing any file changes made by the command. You must set the logchanges property in the Command object if you want file changes logged. */
+        /** This property returns a Collection of {@link FileChange} objects representing any file changes made by the command. 
+         * 
+         * You must set the `logchanges` property in the {@link Command} object if you want file changes logged. */
         changes: FileChange[];
-        /** Indicates whether or not the command ran successfully. Zero indicates the command could not be run or was aborted; any other number indicates the command was run for at least some files. (Note that this is not the "exit code" for external commands. For external commands it only indicates whether or not Opus launched the command. If you need the exit code of an external command, use the WScript.Shell Run or Exec methods to run the command.) */
+        /** Indicates whether or not the command ran successfully.
+         * - Zero indicates the command could not be run or was aborted; 
+         * - any other number indicates the command was run for at least some files. 
+         * 
+         * (Note that this is not the "exit code" for external commands. For external commands it only indicates whether or not Opus launched the command. If you need the exit code of an external command, use the WScript.Shell Run or Exec methods to run the command.) */
         result: number;
-        /** This property returns a Tab[] objects representing any new tabs created by the command. */
+        /** This property returns a Collection of {@link Tab} objects representing any new tabs created by the command. */
         newtabs: Tab[];
-        /** This property returns a Lister[] objects representing any new Listers created by the command. */
+        /** This property returns a Collection of {@link Lister} objects representing any new Listers created by the command. */
         newlisters: Lister[];
-        /** This property returns a Viewer[] objects representing any new image viewers created by the command. (This is only for standalone viewers, not the viewer pane.) */
+        /** This property returns a Collection of {@link Viewer} objects representing any new image viewers created by the command. (This is only for standalone viewers, not the viewer pane.) */
         newviewers: Viewer[];
     }
 
     interface RunResults {
         /** Returns the exit code of the process. */
         exitcode: number;
-        /** Returns any data the command wrote to stdout. */
+        /** Returns any data the command wrote to *stdout*. */
         stdout: string;
-        /** Returns any data the command wrote to stderr. */
+        /** Returns any data the command wrote to *stderr*. */
         stderr: string;
     }
 
@@ -4000,35 +4202,42 @@ declare global {
     }
 
     interface Script {
-        /** Returns a ScriptConfig object representing the configuration values for this script. In the OnInit method a script can define the properties that make up its configuration - the user can then edit these values in Preferences. The object returned by the config property represents the values that the user has chosen. */
+        /** Returns a {@link ScriptConfig} object representing the configuration values for this script. In the {@link OpusOnInit|OnInit} method a script can define the properties that make up its configuration - the user can then edit these values in Preferences. 
+         * 
+         * The object returned by the **config** property represents the values that the user has chosen. */
         config: ScriptConfig;
         /** Returns the path and filename of this script. */
         file: string;
-        /** Returns a Vars object that represents the variables that are scoped to this particular script. This allows scripts to use variables that persist from one invocation of the script to another. */
+        /** Returns a {@link Vars} object that represents the variables that are scoped to this particular script. This allows scripts to use variables that persist from one invocation of the script to another. */
         vars: Vars;
-        /** If your script implements the OnAddColumns event, you can call the InitColumns method at any time to reinitialize your columns. You may want to do this, for example, in response to the user modifying your script's configuration. */
+
+        /** If your script implements the {@link OpusOnAddColumns|OnAddColumns} event, you can call the **InitColumns** method at any time to reinitialize your columns. You may want to do this, for example, in response to the user modifying your script's configuration. */
         InitColumns(): void;
-        /** If your script implements the OnAddCommands event, you can call the InitCommands method at any time to reinitialize your commands. You may want to do this, for example, in response to the user modifying your script's configuration. */
+        /** If your script implements the {@link OpusOnAddCommands|OnAddCommands} event, you can call the **InitCommands** method at any time to reinitialize your commands. You may want to do this, for example, in response to the user modifying your script's configuration. */
         InitCommands(): void;
-        /** Loads an image file from the specified external file. If your script is bundled as a script package you can place image files in a sub-directory of the package called images and then load them from your script by giving their name.
+        /** Loads an image file from the specified external file. If your script is bundled as a script package you can place image files in a sub-directory of the package called **images** and then load them from your script by giving their name.
          * 
-         * If width and height are not provided, they default to 0, meaning the image is loaded at its native size. The width and height parameters only specify the desired size; the resultant image may be smaller or larger, and should be scaled after loading if you need it to be an exact size.
+         * If *width* and *height* are not provided, they default to 0, meaning the image is loaded at its native size. The *width* and *height* parameters only specify the desired size; the resultant image may be smaller or larger, and should be scaled after loading if you need it to be an exact size.
+         * The main purpose of the *width* and *height* parameters is to influence which image within an icon is loaded; most other image formats either ignore the parameters or only use them to speed things up, such as avoiding a full JPEG decode if a partial decode can satisfy the desired image size. 
          * 
-         * The main purpose of the width and height parameters is to influence which image within an icon is loaded; most other image formats either ignore the parameters or only use them to speed things up, such as avoiding a full JPEG decode if a partial decode can satisfy the desired image size. Images are loaded transparently (with alpha) by default; set the alpha argument to False if you want to disable that.
+         * Images are loaded transparently (with alpha) by default; set the *alpha* argument to False if you want to disable that.
          * 
-         * The returned Image object can be given as the value of the Control.label property for a static control in a script dialog (when that control is in "image" mode). You can also assign as to the icon property of a Dialog object to specify a custom window icon for your script dialog. */
+         * The returned {@link Image} object can be given as the value of the {@link Control.label} property for a static control in a script dialog (when that control is in "image" mode). You can also assign it to the **icon** property of a {@link Dialog} object to specify a custom window icon for your script dialog. */
         LoadImage(name: string, width?: number, height?: number, alpha?: boolean): Image;
-        /** Loads external script resources and makes them available to the script. You can either provide a filename or a raw XML string. If your script is bundled as a script package, the resource file must have a .odxml extension for LoadResources to be able to find it in the package. */
+        /** Loads external script resources and makes them available to the script. You can either provide a filename or a raw XML string. If your script is bundled as a script package, the resource file must have a **.odxml** extension for **LoadResources** to be able to find it in the package. */
         LoadResources(filenameOrXML: string): void;
         /** If your script implements any custom columns, you can use this method to cause them to be regenerated if they are currently shown in any tabs. You may want to do this, for example, in response to the user modifying your script's configuration. Pass the name of the column you want to regenerate as the argument to this method. */
         RefreshColumn(name: string): void;
-        /** Forces any dynamically-added and context-sensitive script buttons to be refreshed. Set the full argument to False to only refresh context-sensitive buttons. Set to True to also regenerate dynamic buttons. */
+        /** Forces any dynamically-added and context-sensitive script buttons to be refreshed. 
+         * 
+         * Set the **full** argument to False to only refresh context-sensitive buttons. Set to True to also regenerate dynamic buttons. */
         UpdateButtons(full: boolean): void;
         /** When a script add-in starts up it receives a copy of its current configuration. This method lets you update that copy to reflect any external changes made to the script configuration. */
         UpdateConfig(): void;
         /** Lets a script add-in update the flags for a FAYT extension. This equates to the options shown to the user for the FAYT mode on the Quick Keys Preferences page.
          * 
-         * The name should be the name of the FAYT extension command; this is given to your command as the ScriptFAYTCommandData.fayt property. The flags value should represent a flag combination that's meaningful to your extension. */
+         * - The *name* should be the name of the FAYT extension command; this is given to your command as the {@link ScriptFAYTCommandData.fayt} property. 
+         * - The *flags* value should represent a flag combination that's meaningful to your extension. */
         UpdateFAYTFlags(name: string, flags: number): void;
     }
 
@@ -4040,14 +4249,14 @@ declare global {
     }
 
     interface ScriptColumn {
-        /** If this is set to True (which is the default), and the file display is grouped by this column, Opus will generate the groups automatically based on the column value. If you set this to False, Opus will expect you to provide grouping information in your OnScriptColumn function. */
+        /** If this is set to True (which is the default), and the file display is grouped by this column, Opus will generate the groups automatically based on the column value. If you set this to False, Opus will expect you to provide grouping information in your {@link OpusOnScriptColumn|OnScriptColumn} function. */
         autogroup: boolean;
-        /** Set to True (or 1) to force Opus to update the value for this column when a file changes. You can also set this value to 2 to force Opus to update the value when the file's attributes change (normally it would only update if the file modification time or size changed). */
+        /** Set to True (or **`1`**) to force Opus to update the value for this column when a file changes. You can also set this value to **`2`** to force Opus to update the value when the file's attributes change (normally it would only update if the file modification time or size changed). */
         autorefresh: boolean | number;
         /** Set to True to have this column blurred when taking a secure screenshot. */
         blurrable: boolean;
         /**
-         * By default script columns appear in the Script category, but if you set this value you can make them appear in one of the other column categories.
+         * By default script columns appear in the **Script** category, but if you set this value you can make them appear in one of the other column categories.
          * 
          * Possible valuesfor keywords (and their associated categories):
          *  - "sums" (Checksums)
@@ -4066,50 +4275,62 @@ declare global {
          *  - "size" (Size and Count)
          */
         category: 'sums' | 'date' | 'doc' | 'eval' | 'std' | 'movie' | 'music' | 'loc' | 'other' | 'dims' | 'image' | 'prog' | 'shell' | 'size';
-        /** This property lets you control the default sort behavior for your column. Normally when the user clicks the column header to sort by a column the column is initially sorted in ascending order, and then clicking again reverses the sort order. If you set defsort to -1, the first click on the column header will sort in descending order. Date and size fields have this behavior set by default. */
+        /** This property lets you control the default sort behavior for your column. 
+         * 
+         * Normally when the user clicks the column header to sort by a column the column is initially sorted in ascending order, and then clicking again reverses the sort order. If you set **defsort** to -1, the first click on the column header will sort in descending order. Date and size fields have this behavior set by default. */
         defsort: number;
-        /** Specifies a default width for your column, which will be used unless the file display has auto-sizing enabled. If you specify a simple integer value this represents a width measured in average characters (e.g. 12 specifies 12 average characters wide). You can also specify an absolute number of pixels by adding the px suffix (e.g. "150px" specifies 150 pixels). */
+        /** Specifies a default width for your column, which will be used unless the file display has auto-sizing enabled. If you specify a simple integer value this represents a width measured in average characters (e.g. 12 specifies 12 average characters wide). You can also specify an absolute number of pixels by adding the *px* suffix (e.g. "*150px*" specifies 150 pixels). */
         defwidth: number | string;
         /** Lets you control how the column is "ellipsised"; that is, what happens when its contents are too wide to fit in the column.
          * By default, the end of the string is replaced with an ellipsis (…). Available flags are:
          * - m : Use middle ellipsis instead of end ellipsis
         */
         ellipsis: string;
-        /** For graph columns, specifies the first graph color set. The graph will be displayed in these colors as long as its percentage is below the threshold.  You can either specify a single color (in r,g,b or #rrggbb format), in which case the graph will be a flat solid color, or exactly five colors to configure the graph's gradient. In the second case, the five colors correspond to outer bright, inner bright, inner dark, outer dark, and flat. The first four control the gradient and the fifth (flat) is used when gradients are disabled.  The graph_colors property returns a Vector; you need to use the push_back() method to add your colors to it. */
+        /** For graph columns, specifies the first graph color set. The graph will be displayed in these colors as long as its percentage is below the threshold.  
+         * 
+         * You can either specify a single color (in *r,g,b* or *#rrggbb* format), in which case the graph will be a flat solid color, or exactly five colors to configure the graph's gradient. In the second case, the five colors correspond to *outer bright*, *inner bright*, *inner dark*, *outer dark*, and *flat*. The first four control the gradient and the fifth (flat) is used when gradients are disabled.  
+         * 
+         * The **graph_colors** property returns a {@link Vector}; you need to use the **push_back()** method to add your colors to it. */
         graph_colors: Vector;
-        /** Similar to graph_colors, this property lets you configure a second set of colors for a graph column that will be used when the graph value exceeds the threshold. */
+        /** Similar to **graph_colors**, this property lets you configure a second set of colors for a graph column that will be used when the graph value exceeds the threshold. */
         graph_colors2: Vector;
-        /** For graph columns, specifies the percentage threshold at which the graph will switch from the first color set to the second (e.g. a blue graph goes red to indicate a drive is nearly full). Set the threshold to -1 to disable the second color set altogether. */
+        /** For graph columns, specifies the percentage threshold at which the graph will switch from the first color set to the second (e.g. a blue graph goes red to indicate a drive is nearly full). Set the threshold to **-1** to disable the second color set altogether. */
         graph_threshold: number;
-        /** If the autogroup property is set to False, the grouporder property lets you control the order your column's groups appear in. Each group should be listed in the string in the desired order, separated by a semi-colon (e.g. "Never Modified;Modified"). If not provided, groups will default to sorting alphabetically. */
-
+        /** If the **autogroup** property is set to False, the **grouporder** property lets you control the order your column's groups appear in. Each group should be listed in the string in the desired order, separated by a semi-colon (e.g. *"Never Modified;Modified"*). If not provided, groups will default to sorting alphabetically. */
         grouporder: string;
-        /** If this property is set, this defines the string that will be displayed in the column header when this column is added to a Lister. If not set, the label value will be used. */
+        /** If this property is set, this defines the string that will be displayed in the column header when this column is added to a Lister. If not set, the **label** value will be used. */
         header: string;
-        /** Set this to True if you  want your column to be only available for use in Info Tips. You might want this if your column takes a significant amount of time to return a value, in which case the user would probably only want to use it in an Info Tip so they can see the value on demand. If set to False (the default) the column will be available everywhere. */
-        
+        /** Set this to True if you  want your column to be only available for use in Info Tips. You might want this if your column takes a significant amount of time to return a value, in which case the user would probably only want to use it in an Info Tip so they can see the value on demand. If set to False (the default) the column will be available everywhere. */        
         infotiponly: boolean;
-        /** This field lets you control the justification of your column. If not specified, columns default to left justify. Acceptable values are center, left, right and path. */
+        /** This field lets you control the justification of your column. If not specified, columns default to left justify. Acceptable values are *center*, *left*, *right* and *path*. */
         justify: string;
-        /** If this is set to True, and the user has the Sort-field specific key scrolling Preferences option enabled, then your column will participate in this special mode. */
+        /** If this is set to True, and the user has the **Sort-field specific key scrolling** Preferences option enabled, then your column will participate in this special mode. */
         keyscroll: boolean;
-        /** Use this to set a label for the column. This is displayed in the column header when the column is added to a Details/Power mode file display (unless overridden by the header property), and in various column lists such as in the Folder Options dialog. */
+        /** Use this to set a label for the column. 
+         * 
+         * This is displayed in the column header when the column is added to a Details/Power mode file display (unless overridden by the **header** property), and in various column lists such as in the `Folder Options` dialog. */
         label: string;
-        /** If you add strings to this Vector (e.g. via the push_back method) it will be used to provide a drop-down list of possible values when searching on this column using the Advanced Find function. */
+        /** If you add strings to this {@link Vector} (e.g. via the **push_back** method) it will be used to provide a drop-down list of possible values when searching on this column using the `Advanced Find` function. */
         match: Vector<string>;
-        /** If the column type is set to stars this property lets you specify the maximum number of stars that will be used. This is used to ensure the column is sized correctly. */
+        /** If the column type is set to *stars* this property lets you specify the maximum number of stars that will be used. This is used to ensure the column is sized correctly. */
         maxstars: number;
-        /** This is the name of the method in your script that provides the actual values for your new column. This would typically be set to OnXXXXX where XXXXX is the name of the command, however any method name can be used. When the method is invoked it is passed a single argument, a ScriptColumnData object. Generically this method is referred to as OnScriptColumn. */
+        /** This is the name of the method in your script that provides the actual values for your new column. This would typically be set to *OnXXXXX* where *XXXXX* is the name of the command, however any method name can be used. 
+         * 
+         * When the method is invoked it is passed a single argument, a {@link ScriptColumnData} object. Generically this method is referred to as {@link OpusOnScriptColumn|OnScriptColumn}. */
         method: string;
-        /** If your script implements multiple columns that require common calculations to perform, you may wish to set the multicol property. If this is set to True then your column handler function has the option of returning data for multiple columns simultaneously, rather than just the specific column it is being invoked for.
+        /** If your script implements multiple columns that require common calculations to perform, you may wish to set the **multicol** property. If this is set to True then your column handler function has the option of returning data for multiple columns simultaneously, rather than just the specific column it is being invoked for.
          * 
-         * When your handler is called, the ScriptColumnData object won't contain the usual group, sort, type and value properties. Instead, it will have a columns property that points to a Map that lets you set the values for one or more of your columns at once. 
+         * When your handler is called, the {@link ScriptColumnData} object won't contain the usual **group**, **sort**, **type** and **value** properties. Instead, it will have a **columns** property that points to a {@link DOpusMap|Map} that lets you set the values for one or more of your columns at once. 
          * 
-         * For example, you might set the value of a column called MyColumn like this: `scriptColData.columns("MyColumn").value = "My Column Value";` */
+         * For example, you might set the value of a column called MyColumn like this:
+         * 
+         *  ```scriptColData.columns("MyColumn").value = "My Column Value";``` */
         multicol: boolean;
-        /** This is the raw name of the column. This determines the name that can be used to control the column programmatically (for example, the `Set COLUMNSTOGGLE` command can be used to toggle a column on or off by name).
+        /** This is the raw name of the column. This determines the name that can be used to control the column programmatically (for example, the **`Set COLUMNSTOGGLE`** command can be used to toggle a column on or off by name).
          * 
-         * The name of a custom column is built from a combination of the name of the script that provides the column and the raw name of the column itself, and is preceded by the prefix scp:. For example, if your script were called My Script and your column's name were My Column, you could toggle this column using the command `Set COLUMNSTOGGLE="scp:My Script/My Column"`. You can use the button editor menus to build the command automatically, if you are unsure of anything. */
+         * The name of a custom column is built from a combination of the name of the script that provides the column and the raw name of the column itself, and is preceded by the prefix *scp:*. 
+         * 
+         * For example, if your script were called *My Script* and your column's name were *My Column*, you could toggle this column using the command **`Set COLUMNSTOGGLE="scp:My Script/My Column"`**. You can use the button editor menus to build the command automatically, if you are unsure of anything. */
         name: string;
         /** Set to True to force Opus to update the value for this column when a file's name changes. */
         namerefresh: boolean;
@@ -4117,40 +4338,42 @@ declare global {
         nogroup: boolean;
         /** Set to True to prevent the file display being sorted by this column. */
         nosort: boolean;
-        /** Time, in milliseconds, before Opus may give up waiting for calculation of a column value.  Defaults to 10000 (i.e. 10 seconds). Set to 0 (zero) to force Opus to wait forever in all situations.  The timeout is not always applicable. When Opus asks a script for column data to show in a file display, the timeout is not used because the calculation happens in the background and doesn't hold anything up. But Opus can give up waiting if a column takes too long in situations where it does hold up other things. This is to avoid blocking forever when scripts get stuck in infinite loops.  Find filters and the Print/Export Folder Listing dialog are two examples which use the timeout when requesting data from script columns. A column which calculates hashes of files with no size limit is an example which could be expected to take a long time and where it would make sense to increase the timeout or set it to 0. */
+        /** Time, in milliseconds, before Opus may give up waiting for calculation of a column value.  Defaults to 10000 (i.e. 10 seconds). Set to 0 (zero) to force Opus to wait forever in all situations.  
+         * 
+         * The timeout is not always applicable. When Opus asks a script for column data to show in a file display, the timeout is not used because the calculation happens in the background and doesn't hold anything up. But Opus can give up waiting if a column takes too long in situations where it does hold up other things. This is to avoid blocking forever when scripts get stuck in infinite loops.  Find filters and the Print/Export Folder Listing dialog are two examples which use the timeout when requesting data from script columns. A column which calculates hashes of files with no size limit is an example which could be expected to take a long time and where it would make sense to increase the timeout or set it to 0. */
         timeout: number;
         /** This field lets you set the default type of the column. If not specified, columns default to plain text. 
          * Acceptable values are:
-         * - number      : The column displays integer numbers
-         * - double      : The column displays floating point (fractional) numbers
-         * - size        : The column displays file sizes (automatically displays bytes, KB, MB, etc.)
-         * - zip         : The column displays file sizes (uses the settings for Zip file sizes)
-         * - duration    : The column displays a duration (expects a value in seconds). Hours are only shown if needed.
-         * - durationh   : The column displays a duration. Hours are always shown.
-         * - graph       : The column displays a bar graph (expects a value from 0 to 100)
-         * - graphrel    : The column displays a bar graph. Opus automatically keeps track of the minimum and maximum values provided and scales the graph accordingly
-         * - graphrel0   : Similar to graphrel except the minimum value is always 0, and Opus keeps track of the maximum value
-         * - igraph      : The column displays an inverted bar graph
-         * - igraphrel   : Inverted relative bar graph
-         * - igraphrel0  : Inverted bar graph relative to 0
-         * - percent     : The column displays a percentage
-         * - percentrel  : Relative percentage
-         * - percentrel0 : Percentage relative to 0
-         * - date        : The column displays a date
-         * - time        : The column displays a time
-         * - datetime    : The column displays both a date and a time
-         * - stars       : The column displays stars (similar to the built-in Rating column)
+         * - **number**      : The column displays integer numbers
+         * - **double**      : The column displays floating point (fractional) numbers
+         * - **size**        : The column displays file sizes (automatically displays bytes, KB, MB, etc.)
+         * - **zip**         : The column displays file sizes (uses the settings for Zip file sizes)
+         * - **duration**    : The column displays a duration (expects a value in seconds). Hours are only shown if needed.
+         * - **durationh**   : The column displays a duration. Hours are always shown.
+         * - **graph**       : The column displays a bar graph (expects a value from 0 to 100)
+         * - **graphrel**    : The column displays a bar graph. Opus automatically keeps track of the minimum and maximum values provided and scales the graph accordingly
+         * - **graphrel0**   : Similar to graphrel except the minimum value is always 0, and Opus keeps track of the maximum value
+         * - **igraph**      : The column displays an inverted bar graph
+         * - **igraphrel**   : Inverted relative bar graph
+         * - **igraphrel0**  : Inverted bar graph relative to 0
+         * - **percent**     : The column displays a percentage
+         * - **percentrel**  : Relative percentage
+         * - **percentrel0** : Percentage relative to 0
+         * - **date**        : The column displays a date
+         * - **time**        : The column displays a time
+         * - **datetime**    : The column displays both a date and a time
+         * - **stars**       : The column displays stars (similar to the built-in Rating column)
          * 
          * For plain text columns, you can specify **numericsort** or **nonumericsort** to override the "numeric order filename sorting" setting in Folder Options. Similarly, **wordsort** or **nowordsort** can be used to override the "word sort (special handling for hyphens, etc.)" setting. 
          * You can also combine both options, e.g. **nonumericsort**,**nowordsort** to request only basic sorting. Leave the type unset, or set it to an empty string, for plain text data which respects the Folder Options sort settings. 
          * 
-         * For date, time and datetime columns, you can also specify utc to have the values automatically converted from UTC to local time (e.g. **datetime**,**utc**). 
+         * For *date*, *time* and *datetime* columns, you can also specify utc to have the values automatically converted from UTC to local time (e.g. **datetime**,**utc**). 
          * 
          * For number and double columns, you can also specify **signed** to have the values treated as signed rather than unsigned (e.g. **number**,**signed**). 
          * 
          * For the graph columns, you can use **graph_colors**, **graph_colors2** and **graph_threshold** to configure the graph's appearance. 
          * 
-         * Your `OnScriptColumn` method can override the type on a per-file basis, however this field sets the default type and also controls the behavior of the Advanced Find function when searching using your column.
+         * Your {@link OpusOnScriptColumn|OnScriptColumn} method can override the type on a per-file basis, however this field sets the default type and also controls the behavior of the Advanced Find function when searching using your column.
          */
         type: string;
         /** Allows you to associate a data value with a column. The value will be passed to your column handler in the ScriptColumnData.userdata property */
@@ -4159,74 +4382,96 @@ declare global {
 
 
     interface ScriptColumnDataCore {
-        /** Provides the name of the column that Opus wants the script to return the value for. If you use the same OnScriptColumn method to provide multiple columns you can use this to tell the columns apart. */
+        /** Provides the name of the column that Opus wants the script to return the value for. If you use the same {@link OpusOnScriptColumn|OnScriptColumn} method to provide multiple columns you can use this to tell the columns apart. */
         col: string;
-        /** If the ScriptColumn.autogroup value is set to False when the column is added, you should set this value to indicate the group that this file should be placed in when the list is grouped by your column. If you don't provide a group then this file will go into the Unspecified group. If autogroup is set to True this value is ignored. Note that if the ScriptColumn.multicol value is set to True when the column is added then this property will be found inside the columns Map. */
+        /** If the {@link ScriptColumn.autogroup} value is set to False when the column is added, you should set this value to indicate the group that this file should be placed in when the list is grouped by your column. If you don't provide a group then this file will go into the Unspecified group. If **autogroup** is set to True this value is ignored. 
+         * 
+         * Note that if the {@link ScriptColumn.multicol} value is set to True when the column is added then this property will be found inside the **columns** {@link DOpusMap|Map}. */
         group: string;
-        /** If the group is set via the group property, group_type lets you control the formatting of the group title using the same keywords as the type field (e.g. you can supply a number and have the group title formatted as a file size by setting group_type="size"). Note that if the ScriptColumn.multicol value is set to True when the column is added then this property will be found inside the columns Map. */
+        /** If the group is set via the **group** property, **group_type** lets you control the formatting of the group title using the same keywords as the **type** field (e.g. you can supply a number and have the group title formatted as a file size by setting *group_type="size"*). 
+         * 
+         * Note that if the {@link ScriptColumn.multicol} value is set to True when the column is added then this property will be found inside the columns {@link DOpusMap|Map}. */
         group_type: string;
-        /** Lets you provide text for a column containing simple HTML markup, which will be shown instead of value in contexts that support it (e.g. in a tooltip). You should still provide value as well, as this is what will be shown in the file display columns. */
+        /** Lets you provide text for a column containing simple HTML markup, which will be shown instead of `value` in contexts that support it (e.g. in a tooltip). You should still provide `value` as well, as this is what will be shown in the file display columns. */
         markup: string;
-        /** Lets you control the sort order of your column by providing a sort key that can be different to the value. If provided, and the list is sorted by your column, Opus will use the value of this field to position this item rather than the value value. Note that if the ScriptColumn.multicol value is set to True when the column is added then this property will be found inside the columns Map. */
+        /** Lets you control the sort order of your column by providing a sort key that can be different to the **value**. If provided, and the list is sorted by your column, Opus will use the value of this field to position this item rather than the **value** value. 
+         * 
+         * Note that if the {@link ScriptColumn.multicol} value is set to True when the column is added then this property will be found inside the **columns** {@link DOpusMap|Map}. */
         sort: any;
-        /** Lets you override the default type of the column (set via `ScriptColumn.type` when the column was added) on a per-file/folder basis.  If not specified, and no default was specified either, then columns default to plain text.  Note that if the `ScriptColumn.multicol` value is set to True when the column is added then this property will be found inside the columns Map. 
+        /** Lets you override the default type of the column (set via {@link ScriptColumn.type} when the column was added) on a per-file/folder basis.  
+         * If not specified, and no default was specified either, then columns default to plain text.  
+         * Note that if the {@link ScriptColumn.multicol} value is set to True when the column is added then this property will be found inside the **columns** {@link DOpusMap|Map}. 
          * Acceptable values are:
-         * - number      : The column displays integer numbers.
-         * - double      : The column displays floating point (fractional) numbers.
-         * - size        : The column displays file sizes (automatically displays bytes, KB, MB, etc.)
-         * - zip         : The column displays file sizes (uses the settings for Zip file sizes).
-         * - graph       : The column displays a bar graph (expects a value from 0 to 100).
-         * - igraph      : The column displays an inverted bar graph.
-         * - percent     : The column displays a percentage.
-         * - date        : The column displays a date.
-         * - time        : The column displays a time.
-         * - datetime    : The column displays both a date and a time.
-         * - stars       : The column displays stars (similar to the built-in Rating column). The value should be in the form "x" or "x/y".
+         * - **number**      : The column displays integer numbers.
+         * - **double**      : The column displays floating point (fractional) numbers.
+         * - **size**        : The column displays file sizes (automatically displays bytes, KB, MB, etc.)
+         * - **zip**         : The column displays file sizes (uses the settings for Zip file sizes).
+         * - **graph**       : The column displays a bar graph (expects a value from 0 to 100).
+         * - **igraph**      : The column displays an inverted bar graph.
+         * - **percent**     : The column displays a percentage.
+         * - **date**        : The column displays a date.
+         * - **time**        : The column displays a time.
+         * - **datetime**    : The column displays both a date and a time.
+         * - **stars**       : The column displays stars (similar to the built-in *Rating* column). The **value** should be in the form "x" or "x/y".
          * 
-         * For date, time and datetime columns, you can also specify utc to have the values automatically converted from UTC to local time (e.g. **datetime**,**utc**). 
+         * For *date*, *time* and *datetime* columns, you can also specify utc to have the values automatically converted from UTC to local time (e.g. **datetime**,**utc**). 
          * 
-         * For number and double columns, you can also specify **signed** to have the values treated as signed rather than unsigned (e.g. **number**,**signed**). 
+         * For *number* and *double* columns, you can also specify **signed** to have the values treated as signed rather than unsigned (e.g. **number,signed**). 
          * 
-         * The options above are a subset of those you can specify via `ScriptColumn.type`, since not all options make sense on a per-file/folder basis.
-         * 
-         * Note that if you mix different types within the one column then the results you get when sorting by this column, or searching on your column using the Advanced Find function, may be hard to predict.
+         * The options above are a subset of those you can specify via {@link ScriptColumn.type}, since not all options make sense on a per-file/folder basis. 
+         * Note that if you mix different types within the one column then the results you get when sorting by this column, or searching on your column using the **Advanced Find** function, may be hard to predict.
         */
         type: string;
-        /** This field is how your method returns the actual value for your column - that is, the information that is displayed to the user in this column for each file and folder. If the type for this column has been set (either by ScriptColumnData.type or ScriptColumn.type) then Opus will try to convert the provided value to the specified type. If the type is not set then Opus will treat the value as a plain text string. If you don't provide a sort key via the sort field then Opus will also use this value to order the list when the list is sorted by this column. Note that if the ScriptColumn.multicol value is set to True when the column is added then this property will be found inside the columns Map. */
+        /** This field is how your method returns the actual value for your column - that is, the information that is displayed to the user in this column for each file and folder. 
+         * 
+         * If the type for this column has been set (either by **ScriptColumnData.type** or {@link ScriptColumn.type}) then Opus will try to convert the provided value to the specified type. If the type is not set then Opus will treat the value as a plain text string. 
+         * 
+         * If you don't provide a sort key via the **sort** field then Opus will also use this value to order the list when the list is sorted by this column. 
+         * 
+         * Note that if the {@link ScriptColumn.multicol} value is set to True when the column is added then this property will be found inside the **columns** {@link DOpusMap|Map}. */
         value: any;
-        /** This returns the value associated with this column via ScriptColumn.userdata (if any) when the column was added. Note that if the ScriptColumn.multicol value is set to True when the column is added then this property will be found inside the columns Map. */
+        /** This returns the value associated with this column via {@link ScriptColumn.userdata} (if any) when the column was added. 
+         * 
+         * Note that if the {@link ScriptColumn.multicol} value is set to True when the column is added then this property will be found inside the **columns** {@link DOpusMap|Map}. */
         userdata: any;
     }
 
 
     interface ScriptColumnData extends ScriptColumnDataCore {
-        /** If the `ScriptColumn.multicol` value is set to True when the column is added, then this property provides a Map that lets you return the values of one or more columns at once.
+        /** If the {@link ScriptColumn.multicol} value is set to True when the column is added, then this property provides a {@link DOpusMap|Map} that lets you return the values of one or more columns at once.
          * 
          * You may want to use this method if your script returns multiple columns that all share common calculations (e.g. reading the contents of a folder). That way, you can avoid repeating potentially time consuming operations when you're called for the second and subsequent columns. 
          * 
-         * The Map contains one member element for each of your columns. Each member element has `group`, `group_type`, `sort`, `type`, `userdata`, `markup` and `value` properties which are equivalent to the ones described below.
+         * The {@link DOpusMap|Map} contains one member element for each of your columns. Each member element has `group`, `group_type`, `sort`, `type`, `userdata`, `markup` and `value` properties which are equivalent to the ones described below.
          * 
-         * For example, you might set the value of a column called MyColumn like this:  `scriptColData.columns("MyColumn").value = "My Column Value";`
+         * For example, you might set the value of a column called *MyColumn* like this:
+         * ```
+         *     scriptColData.columns("MyColumn").value = "My Column Value";
+         * ```
          * 
          * You should check if a column exists in the map before populating data for it. In some situations, Opus will only request a some of the columns your add-in supports, not all of them. 
          * 
-         * If you do not fill in data for a column which Opus still needs, Opus will call your method again to request it, with its name in the col property (but still in multi-column mode). You can take advantage of this if calculating one piece of data yields values for some of your columns but not all of them. You do not need to populate every column if the data is not available, but you should at least populate the col column. 
+         * If you do not fill in data for a column which Opus still needs, Opus will call your method again to request it, with its name in the col property (but still in multi-column mode). You can take advantage of this if calculating one piece of data yields values for some of your columns but not all of them. You do not need to populate every column if the data is not available, but you should at least populate the `col` column. 
          * 
          * As a consequence of the above, when using multi-column mode you should always set some kind of value for any column you have spent time calculating, even if the result of the calculation is that nothing should be shown in the column. If nothing should be shown, set the value to an empty string (this is fine even if the column normally displays numbers or another type of data). If you don't set any value at all, Opus will assume you haven't calculated that column yet and may call your script again to ask for it, which could cause you to waste time re-calculating it when you already know it is blank. */
         columns: DOpusMap<string, ScriptColumnDataCore>;
-        /** Returns an Item object representing the file or folder that Opus wants the script to return the column value for. */
+        /** Returns an {@link Item} object representing the file or folder that Opus wants the script to return the column value for. */
         item: Item;
-        /** Returns a Tab object representing the tab that contains the item. */
+        /** Returns a {@link Tab} object representing the tab that contains the item. */
         tab: Tab;
     }
 
 
     interface ScriptCommand {
-        /** Lets you flag one or more command arguments as needing context-sensitive state. For example, you may want a toolbar button to appear highlighted, or disabled, in certain situations. The argument names (comma-separated) must correspond to arguments given by the template property. When your command is placed on a toolbar or menu with the appropriate arguments, your script's OnButtonContext method will be called to update the button state. You can set this value to * to indicate that all arguments require context sensitivity. */
+        /** Lets you flag one or more command arguments as needing context-sensitive state. For example, you may want a toolbar button to appear highlighted, or disabled, in certain situations. The argument names (comma-separated) must correspond to arguments given by the *template* property.
+         * 
+         * When your command is placed on a toolbar or menu with the appropriate arguments, your script's {@link OpusOnButtonContext|OnButtonContext} method will be called to update the button state. You can set this value to `*` to indicate that all arguments require context sensitivity. */
         context_args: string;
-        /** Use this to set a description for the command, that is displayed in the Customize dialog when the user selects the command from the Commands tab. */
+        /** Use this to set a description for the command, that is displayed in the **Customize** dialog when the user selects the command from the **Commands tab**. */
         desc: string;
-        /** Lets you flag one or more command arguments as generating dynamic buttons. The argument names (comma-separated) must correspond to arguments given by the template property. When your command is placed on a toolbar or menu with the appropriate arguments, your script's OnAddButtons method will be called to generate one or more dynamic buttons. You can set this value to * to indicate that all arguments generate dynamic buttons. */
+        /** Lets you flag one or more command arguments as generating dynamic buttons. The argument names (comma-separated) must correspond to arguments given by the *template* property. 
+         * 
+         * When your command is placed on a toolbar or menu with the appropriate arguments, your script's {@link OpusOnAddButtons|OnAddButtons} method will be called to generate one or more dynamic buttons. You can set this value to `*` to indicate that all arguments generate dynamic buttons. */
         dynamic_args: string;
         /** Specifies various flags which affect how your script command runs. If not provided, the default is "sd".
          * - s   : want source folder (will still run without one)
@@ -4239,56 +4484,64 @@ declare global {
          * - N   : need selected entries (either files/folders or both depending on other flags)
          * - w   : don't swap source/destination folder if command is run against the destination */
         flags: string;
-        /** Returns a ScriptFAYTCommand object that you can use to initialise this command to extend the FAYT field. */
+        /** Returns a {@link ScriptFAYTCommand} object that you can use to initialise this command to extend the FAYT field. */
         fayt: ScriptFAYTCommand;
         /** Set to True to hide this command from the drop-down command list shown in the command editor. This lets you add commands that can still be used in buttons and hotkeys but won't clutter up the command list. */
         hide: boolean;
-        /** Use this property to assign a default icon to this command. You can specify the name of an internal icon (if you want to specify an icon from a particular set, use setname:iconname - use this if you have bundled your script in a script package with its own icon set) or the path of an external icon or image file. */
+        /** Use this property to assign a default icon to this command. You can specify the name of an internal icon (if you want to specify an icon from a particular set, use *setname:iconname* - use this if you have bundled your script in a script package with its own icon set) or the path of an external icon or image file. */
         icon: string;
-        /** Use this to set a label for the command. This is displayed in the Commands tab of the Customize dialog (under the Script Commands category), and will form the default label of the button created if the user drags that command out to a toolbar. The actual name of the command (used to invoke the command) is assigned through the name property. */
-        label: string;
-        /** This is the name of the method that Opus will call in your script when the command is invoked. This would typically be set to OnXXXXX where XXXXX is the name of the command, however any method name can be used.
+        /** Use this to set a label for the command. This is displayed in the Commands tab of the Customize dialog (under the *Script Commands* category), and will form the default label of the button created if the user drags that command out to a toolbar. 
          * 
-         * When the method is invoked it is passed a single argument, a ScriptCommandData object. Generically this method is referred to as OnScriptCommand. */
+         * The actual name of the command (used to invoke the command) is assigned through the **name** property. */
+        label: string;
+        /** This is the name of the method that Opus will call in your script when the command is invoked. This would typically be set to *OnXXXXX* where *XXXXX* is the name of the command, however any method name can be used.
+         * 
+         * When the method is invoked it is passed a single argument, a {@link ScriptCommandData} object. Generically this method is referred to as {@link OpusOnScriptCommand|OnScriptCommand}. */
         method: string;
         /** This is the name of the command. This determines the name that will invoke the command when it is used in buttons and hotkeys. */
         name: string;
         /** Set to false if you don't want your command to display a progress indicator if more than one file is selected. */
         noprogress: boolean;
-        /** This lets you specify an optional command line template for the command. This is a string in the form ARGNAME1/MOD,ARGNAME2/MOD,ARGNAME3/MOD, etc, where ARGNAME is the name of the argument and /MOD are one or more modifiers used to indicate the argument type. The command line template can specify as many arguments as needed. 
+        /** Set to true when adding a dynamic command that you want to be able to support embedded functions. */
+        supportembedded: boolean;
+        /** This lets you specify an optional command line template for the command. This is a string in the form *ARGNAME1/MOD,ARGNAME2/MOD,ARGNAME3/MOD*, etc, where ARGNAME is the name of the argument and /MOD are one or more modifiers used to indicate the argument type. The command line template can specify as many arguments as needed. 
          * 
-         * When your command is invoked and its OnScriptCommand event is triggered, any arguments supplied on the command line are parsed according to this template and provided via the ScriptCommandData.func.args property. */
+         * When your command is invoked and its {@link OpusOnScriptCommand|OnScriptCommand} event is triggered, any arguments supplied on the command line are parsed according to this template and provided via the {@link ScriptCommandData}.func.args property. */
         template: string;
     }
 
     interface ScriptCommandData {
-        /** This returns the original command line that invoked the command. If any arguments were provided on the command line they are available in parsed form from the func.args property. */
+        /** This returns the original command line that invoked the command. If any arguments were provided on the command line they are available in parsed form from the **func.args** property. */
         cmdline: string;
         /** If this is a string, it means this is being called as a FAYT extension command. If set to False it's a regular command. */
         fayt: string | boolean;
-        /** Returns a Func object relating to this function. This provides access to information about the function's environment (source and destination tabs, etc) as well as any variables and parsed command line arguments. */
+        /** Returns a {@link Func} object relating to this function. This provides access to information about the function's environment (source and destination tabs, etc) as well as any variables and parsed command line arguments. */
         func: Func;
     }
 
 
     interface ScriptFAYTCommand {
-        /** Specify the default background color for your FAYT extension. This should be in the form #RRGGBB (hexadecimal) or RRR,GGG,BBB (decimal). You should use this and the textcolor property to specify both dark and light colors as the same, otherwise use the dark and light properties. */
+        /** Specify the default background color for your FAYT extension. This should be in the form **#RRGGBB** (hexadecimal) or **RRR,GGG,BBB** (decimal). You should use this and the **textcolor** property to specify both dark and light colors as the same, otherwise use the **dark** and **light** properties. */
         backcolor: string;
-        /** Use the ScriptColorPair object this returns to specify the default dark mode text and background colors for your FAYT extension (and use the light property to specify the light mode colors). If you want the default dark and light colors to be the same, you can use the textcolor and backcolor properties instead. */
+        /** Use the {@link ScriptColorPair} object this returns to specify the default dark mode text and background colors for your FAYT extension (and use the **light** property to specify the light mode colors). If you want the default dark and light colors to be the same, you can use the **textcolor** and **backcolor** properties instead. */
         dark: ScriptColorPair;
         /** Set this property to True to enable the FAYT extension. */
         enable: boolean;
-        /** Lets you specify a set of flags that the user will be able to turn on or off through the user interface. To use this, you need to assign the property to a Map object created by the DOpus.Create.Map method. Each flag should be added to the map with its numeric value (a power of two; e.g. 1, 2, 4, 8, …) as the key and its label as the value. When your FAYT extension is called, Opus will add the values of the flags the user has chosen together and pass them to your command. The maximum number of flags you can add is 16. */
+        /** Lets you specify a set of flags that the user will be able to turn on or off through the user interface. To use this, you need to assign the property to a {@link DOpusMap|Map} object created by the {@link DOpus.Create}.Map method. 
+         * 
+         * Each flag should be added to the map with its numeric value (a power of two; e.g. 1, 2, 4, 8, …) as the key and its label as the value. When your FAYT extension is called, Opus will add the values of the flags the user has chosen together and pass them to your command. 
+         * 
+         * The maximum number of flags you can add is 16. */
         flags: DOpusMap<number, string>;
         /** Lets you specify a default key for your FAYT extension. Pushing this key from a file display or FAYT field will invoke the script. */
         key: string;
         /** This lets you specify a label for your FAYT extension which is shown in the user interface. If not supplied, the name of the command is used. */
         label: string;
-        /** Use the ScriptColorPair object this returns to specify the default light mode text and background colors for your FAYT extension (and use the dark property to specify the dark mode colors). If you want the default dark and light colors to be the same, you can use the textcolor and backcolor properties instead. */
+        /** Use the {@link ScriptColorPair} object this returns to specify the default light mode text and background colors for your FAYT extension (and use the **dark** property to specify the dark mode colors). If you want the default dark and light colors to be the same, you can use the **textcolor** and **backcolor** properties instead. */
         light: ScriptColorPair;
-        /** Set to True to have your extension called in realtime as the user types. If set to False your extension will be called only when the user presses Enter. If set to an integer value, this specifies the number of milliseconds between when the user types and your script is called (i.e. deferred notification). */
+        /** Set to True to have your extension called in realtime as the user types. If set to False your extension will be called only when the user presses `Enter`. If set to an integer value, this specifies the number of milliseconds between when the user types and your script is called (i.e. deferred notification). */
         realtime: boolean | number;
-        /** Specify the default text color for your FAYT extension. This should be in the form #RRGGBB (hexadecimal) or RRR,GGG,BBB (decimal). You should use this and the backcolor property to specify both dark and light colors as the same, otherwise use the dark and light properties. */
+        /** Specify the default text color for your FAYT extension. This should be in the form **#RRGGBB** (hexadecimal) or **RRR,GGG,BBB** (decimal). You should use this and the backcolor property to specify both dark and light colors as the same, otherwise use the dark and light properties. */
         textcolor: string;
         /** Set to false if you don't want to be called for a suggestion list for an empty string (i.e. the user must type something before your extension is invoked). */
         wantempty: boolean;
@@ -4300,13 +4553,13 @@ declare global {
         cmdline: string;
         /** The name of the FAYT extension command being invoked. This lets you use the same entry point to implement multiple FAYT extensions if desired. If the value is False then this is not a FAYT extension at all, but a regular script command. */
         fayt: string | boolean;
-        /** Provides the sum of all the flags the user has enabled for your FAYT extension. These come from the flags property you specified when initialising your extension via the ScriptFAYTCommand object. 
+        /** Provides the sum of all the flags the user has enabled for your FAYT extension. These come from the flags property you specified when initialising your extension via the {@link ScriptFAYTCommand} object. 
          * 
-         * Your script can update the flags in the users' configuration using the Script.UpdateFAYTFlags method. */
+         * Your script can update the flags in the users' configuration using the {@link Script.UpdateFAYTFlags} method. */
         flags: number;
-        /** This will equal the string "return" if the user pushed the return key to trigger your FAYT extension. */
+        /** This will equal the string **"return"** if the user pushed the return key to trigger your FAYT extension. */
         key: string;
-        /** If set to True this is a hint that you should update the suggestions list via the Tab.UpdateFAYTSuggestions method. */
+        /** If set to True this is a hint that you should update the suggestions list via the {@link Tab.UpdateFAYTSuggestions} method. */
         suggest: boolean;
         /** Provides the key that initially triggered the FAYT in this mode. */
         quickkey: string;
@@ -4318,22 +4571,22 @@ declare global {
     interface ScriptConfig {
         /** The properties of the ScriptConfig object are entirely determined by the script itself.
          * 
-         * In the OnInit method, assign the default values of any configuration properties you want to this object. The type of each default value controls the type of the property.
+         * In the {@link OpusOnInit|OnInit} method, assign the default values of any configuration properties you want to this object. The type of each default value controls the type of the property.
          * 
          * The Preferences page only supports editing certain types of variables, so you must only assign properties of compatible types. Preferences supports:
-         * - Boolean options (True or False) - the variable type must be bool
-         * - Numeric options - the variable type must be int
-         * - String options - the variable type must be string
-         * - Multi-line string options - the variable type must be string and must contain at least one CR/LF pair. Note that a trailing CR/LF will be removed from the default value.
-         * - Multiple string options - the variable type must be a Vector of strings
-         * - Drop-down list - the variable type must be a Vector with an int as the first element (to specify the default selection), and strings for the remaining elements.
+         * - Boolean options (**True** or **False**) - the variable type must be *bool*
+         * - Numeric options - the variable type must be *int*
+         * - String options - the variable type must be *string*
+         * - Multi-line string options - the variable type must be string and must contain at least one *CR/LF* pair. Note that a trailing *CR/LF* will be removed from the default value.
+         * - Multiple string options - the variable type must be a {@link Vector} of strings
+         * - Drop-down list - the variable type must be a {@link Vector} with an *int* as the first element (to specify the default selection), and strings for the remaining elements.
          */
         [argumentName: string]: boolean | number | string | Vector<string> | Vector<any>;
     }
 
 
     interface ScriptConfigChangeData {
-        /** Returns a Vector containing the names of the configuration items that were modified. */
+        /** Returns a {@link Vector} containing the names of the configuration items that were modified. */
         changed: Vector<string>;
     }
 
@@ -4371,7 +4624,11 @@ declare global {
     
 
     interface ScriptInitData {
-        /** Returns a ScriptConfig object, that the script can use to initialize its default configuration. Properties added to the object in this method will be displayed to the user in Preferences, allowing them to change their value and thus configure the behavior of the script. If you want to preserve the order of configuration items, you can replace this object with an OrderedMap by simply assigning the new object to the config property. Each property added to this object can have a number of properties of its own, to configure how the property is treated by Opus.
+        /** Returns a {@link ScriptConfig} object, that the script can use to initialize its default configuration. Properties added to the object in this method will be displayed to the user in Preferences, allowing them to change their value and thus configure the behavior of the script. 
+         * 
+         * If you want to preserve the order of configuration items, you can replace this object with an {@link DOpusOrderedMap|OrderedMap} by simply assigning the new object to the `config` property. 
+         * 
+         * Each property added to this object can have a number of properties of its own, to configure how the property is treated by Opus.
          * - desc        : Sets a description string for the property.
          * - group       : Places the property into a named group.
          * - group_order : Controls the group order.
@@ -4382,23 +4639,24 @@ declare global {
          * - sort_order  : Specify a custom sort position for this property in the editor.
          * - type        : Specify the property type in case the automatic identification fails. Valid type strings are "float" (floating point number) and "multiline" (multiline string). You can also specify the number of decimal places, e.g. "float:3".
          * 
-         * Complementary information:
-         * Script configuration values.
-         *
-         * Each property is a primitive value which may expose additional configuration metadata sub-properties (since Opus 13.19).
-         * 
-         * See ScriptInitDataProperties for the list of supported sub-properties.
-         * 
          * Legacy Maps (config_desc, config_groups, config_types, ...) are still supported.
         */
         config: ScriptConfig;
-        /** This lets you assign descriptions for your script's configuration options that are shown to the user in the editor dialog. To do this, set this property to a Map created via the DOpusFactory.Map method, filled with name/description string pairs. Instead of this method you can also specify the description using the configuration property itself; e.g given a property called name, you can set the description via name.description. */
+        /** This lets you assign descriptions for your script's configuration options that are shown to the user in the editor dialog. To do this, set this property to a {@link DOpusMap|Map} created via the {@link DOpusFactory.Map} method, filled with name/description string pairs. 
+         * 
+         * Instead of this method you can also specify the description using the configuration property itself; e.g given a property called `name`, you can set the description via `name.description`. */
         config_desc: DOpusMap<string, string> | DOpusOrderedMap<string, string>;
-        /** This lets you organize your script's configuration options into groups when shown to the user in the editor dialog. The group names are arbitrary - configuration options with the same group name will appear grouped together. Set this property to a Map created via the DOpusFactory.Map method, filled with name/group string pairs. Instead of this method you can also specify the group using the configuration property itself; e.g given a property called name, you can set the group via name.group. */
+        /** This lets you organize your script's configuration options into groups when shown to the user in the editor dialog. The group names are arbitrary - configuration options with the same group name will appear grouped together. Set this property to a {@link DOpusMap|Map} created via the {@link DOpusFactory.Map} method, filled with name/group string pairs. 
+         * 
+         * Instead of this method you can also specify the group using the configuration property itself; e.g given a property called `name`, you can set the group via `name.group`. */
         config_groups: DOpusMap<string, string>;
-        /** This lets you control the order of configuration item groups for your script. To use this, set the property to a Vector object (created by the DOpus.NewVector method), and push the group names onto the vector in the desired order. Instead of this method you can also specify the group order using the configuration property itself; e.g given a property called name, you can set the group order via name.group_order. */
+        /** This lets you control the order of configuration item groups for your script. To use this, set the property to a {@link Vector} object (created by the {@link DOpus.NewVector} method), and push the group names onto the vector in the desired order. 
+         * 
+         * Instead of this method you can also specify the group order using the configuration property itself; e.g given a property called `name`, you can set the group order via `name.group_order`. */
         config_group_order: Vector<string>;
-        /** While the type of a configuration option is normally inferred automatically, this lets you explicitly set the type which may be needed in some cases. For example, you can mark a value as a float even if its default is zero or a whole number. Set this property to a Map created via the DOpusFactory.Map method, filled with name/type string pairs. Valid type strings are "float" (floating point number) and "multiline" (multiline string). You can also specify the number of decimal places, e.g. "float:3". Instead of this method you can also specify the type using the configuration property itself; e.g given a property called name, you can set the type via name.type. */
+        /** While the type of a configuration option is normally inferred automatically, this lets you explicitly set the type which may be needed in some cases. For example, you can mark a value as a float even if its default is zero or a whole number. Set this property to a {@link DOpusMap|Map} created via the {@link DOpusFactory.Map} method, filled with name/type string pairs. Valid type strings are "float" (floating point number) and "multiline" (multiline string). You can also specify the number of decimal places, e.g. "float:3". 
+         * 
+         * Instead of this method you can also specify the type using the configuration property itself; e.g given a property called `name`, you can set the type via `name.type`. */
         config_types: DOpusMap<string, string>;
         /** Lets the script specify a copyright message that is displayed to the user in Preferences. */
         copyright: string;
@@ -4406,7 +4664,7 @@ declare global {
         default_enable: boolean;
         /** Lets the script specify a description message that is displayed to the user in Preferences. */
         desc: string;
-        /** Set this to True if your script implements the OnDoubleClick event and (for performance reasons) you want to be called with only a path to the double-clicked item rather than a full Item object. See the OnDoubleClick event documentation for more details. */
+        /** Set this to True if your script implements the {@link OpusOnDoubleClick|OnDoubleClick} event and (for performance reasons) you want to be called with only a path to the double-clicked item rather than a full {@link Item} object. See the {@link OpusOnDoubleClick|OnDoubleClick} event documentation for more details. */
         early_dblclk: boolean;
         /** Returns the path and filename of this script. */
         file: string;
@@ -4414,31 +4672,37 @@ declare global {
         group: string;
         /** Lets the script specify a string that will be prepended to any log output it performs. If not set the name of the script is used by default. */
         log_prefix: string;
-        /** Specifies the minimum Opus version required. If the current version is less than the specified version the script will be disabled. You can specify the major version only (e.g. "11"), a major and minor version (e.g. "11.3") or a specific beta version (e.g. "11.3.1" for 11.3 Beta 1). */
+        /** Specifies the minimum Opus version required. If the current version is less than the specified version the script will be disabled. You can specify the major version only (e.g. *"11"*), a major and minor version (e.g. *"11.3"*) or a specific beta version (e.g. *"11.3.1"* for 11.3 Beta 1). */
         min_version: string;
         /** Lets the script specify a display name for the script that is shown in Preferences. */
         name: string;
-        /** The OnInit method is called in two different circumstances - once during Opus startup, and again if the script is installed or edited when Opus is already running. This property will return True if the OnInit method is being called during Opus startup, or False for any other time. */
+        /** The {@link OpusOnInit|OnInit} method is called in two different circumstances - once during Opus startup, and again if the script is installed or edited when Opus is already running. This property will return True if the OnInit method is being called during Opus startup, or False for any other time. */
         startup: boolean;
         /** Lets you provide a URL where the user can go to find out more about your script (it's displayed to the user in Preferences). */
         url: string;
-        /** Returns a Vars collection of user and script-defined variables that are local to this script. These variables are available to other methods in the script via the Script.vars property. */
+        /** Returns a {@link Vars} collection of user and script-defined variables that are local to this script. These variables are available to other methods in the script via the {@link Script.vars} property. */
         vars: Vars;
         /** Lets the script specify a version number string that is displayed to the user in Preferences. */
         version: string;
-        /** Adds a new information column to Opus. The returned ScriptColumn object must be properly initialized. A script add-in can add as many columns as it likes, and these will be available in file displays, infotips and the Advanced Find function. Instead of adding columns in OnInit, your script can implement the OnAddColumns method. This is more flexible as it allows you to access your script's configuration at the time you add columns, and columns can be dynamically added and removed while Opus is running. If OnAddColumns is implemented then this method is unavailable in OnInit. */
+        /** Adds a new information column to Opus. The returned {@link ScriptColumn} object must be properly initialized. A script add-in can add as many columns as it likes, and these will be available in file displays, infotips and the Advanced Find function. 
+         * 
+         * Instead of adding columns in {@link OpusOnInit|OnInit}, your script can implement the {@link OnAddColumns} method. This is more flexible as it allows you to access your script's configuration at the time you add columns, and columns can be dynamically added and removed while Opus is running. If {@link OnAddColumns} is implemented then this method is unavailable in {@link OpusOnInit|OnInit}. */
         AddColumn(): ScriptColumn;
-        /** Adds a new internal command to Opus. The returned ScriptCommand object must be properly initialized. A script add-in can add as many internal commands as it likes to the Opus internal command set. Instead of adding commands in OnInit, your script can implement the OnAddCommands method. This is more flexible as it allows you to access your script's configuration at the time you add commands, and commands can be dynamically added and removed while Opus is running. If OnAddCommands is implemented then this method is unavailable in OnInit. */
+        /** Adds a new internal command to Opus. The returned {@link ScriptCommand} object must be properly initialized. A script add-in can add as many internal commands as it likes to the Opus internal command set. 
+         * 
+         * Instead of adding commands in OnInit, your script can implement the {@link OpusOnAddCommands|OnAddCommands} method. This is more flexible as it allows you to access your script's configuration at the time you add commands, and commands can be dynamically added and removed while Opus is running. If {@link OpusOnAddCommands|OnAddCommands} is implemented then this method is unavailable in {@link OpusOnInit|OnInit}. */
         AddCommand(): ScriptCommand;
     }
 
 
     interface ScriptStrings {
-        /** Returns a Vector of strings representing the languages that strings have been defined for. */
+        /** Returns a {@link Vector} of strings representing the languages that strings have been defined for. */
         langs: Vector<string>;
-        /** Returns the text of a string specified by name. The name must match the name used in the string resources.  Optionally you can provide a language name as the second parameter, to retrieve a string from a particular language. Otherwise, the string is returned in the current language. */
+        /** Returns the text of a string specified by name. The name must match the name used in the string resources.  
+         * 
+         * Optionally you can provide a language name as the second parameter, to retrieve a string from a particular language. Otherwise, the string is returned in the current language. */
         Get(name: string, language?: string): string;
-        /** Returns the text of a string specified by name. This works the same as the Get method but interprets Javascript-style embedded escape characters in the string. E.g. \n in the string is converted to a new line. */
+        /** Returns the text of a string specified by name. This works the same as the **Get** method but interprets Javascript-style embedded escape characters in the string. E.g. `\n` in the string is converted to a new line. */
         GetEscaped(name: string, language?: string): string;
         /** Returns True if strings in the specified language are defined in the resources. */
         HasLanguage(language: string): boolean;
@@ -4451,7 +4715,7 @@ declare global {
         display_name: string;
         /** The property is intended to be viewed by the user (e.g. in a column). */
         isviewable: boolean;
-        /** The default column justification for this property (left, right, center). */
+        /** The default column justification for this property (**left**, **right**, **center**). */
         justify: string;
         /** The PKEY (property key) for this property. This is a property's unique ID and the canonical way to refer to a property. You can use the **raw_name** and **display_name** values to access properties as well, but they are potentially inaccurate (since it's possible to have two properties with the same name) and also slower as the property has to be looked up by name each time. */
         pkey: string;
@@ -4464,7 +4728,11 @@ declare global {
     interface ShutdownData {
         /** Returns True if the Windows session is ending (that is, if Opus is shutting down because the system is shutting down), or False if it's just Opus that is quitting. */
         endsession: boolean;
-        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  The string can contain any or all of the following: shift ctrl, alt, lwin, rwin  If no qualifiers were down, the string will be: none */
+        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*.
+         * 
+         * If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
     }
 
@@ -4487,12 +4755,12 @@ declare global {
         timestamp: DOpusDate;
         /** Returns True if the signature was timestamped. */
         timestamped: boolean;
-        /** Returns True if the signature validation was successful. Note that the signature is only validated if the verify parameter is set to True or one of the other validation flags when the GetSignature method is called. */
+        /** Returns True if the signature validation was successful. Note that the signature is only validated if the **verify** parameter is set to True or one of the other validation flags when the {@link FSUtil.GetSignature} method is called. */
         valid: boolean;
     }
 
     interface SmartFavorite {
-        /** Returns the path this entry represents, as a Path object. */
+        /** Returns the path this entry represents, as a {@link Path} object. */
         path: Path;
         /** Returns the number of points this entry has as a source folder. The point score is used by Opus to determine which folders to display. */
         points: number;
@@ -4510,9 +4778,9 @@ declare global {
     }
 
     interface SortOrder {
-        /** Returns a Vector of strings representing the current sort order of files in the folder. If multiple manual sort orders have been defined, you can provide the name of a specific sort order as an argument to this method. If called with no arguments it returns the current sort order by default. */
+        /** Returns a {@link Vector} of strings representing the current sort order of files in the folder. If multiple manual sort orders have been defined, you can provide the name of a specific sort order as an argument to this method. If called with no arguments it returns the current sort order by default. */
         GetOrder(name?: string): Vector;
-        /** You can pass this method a Vector of strings to change the sort order of the current folder. You can optionally provide the name of a sort order as the second parameter if you’ve got more than one sort order defined. */
+        /** You can pass this method a {@link Vector} of strings to change the sort order of the current folder. You can optionally provide the name of a sort order as the second parameter if you’ve got more than one sort order defined. */
         SetOrder(order: Vector<string>, name?: string): void;
         /** Resets the manual sort order to the currently selected sort order (e.g. if the file display header indicates that it is sorted by name, **ResetOrder** would reset to filename order). You can optionally provide the name of a sort order as the second parameter if you’ve got more than one sort order defined. */
         ResetOrder(name?: string): void;
@@ -4521,11 +4789,15 @@ declare global {
     interface SourceDestData {
         /** Returns True if the tab is now the destination. */
         dest: boolean;
-        /** Returns True if the tab is now the source. If both source and dest return False it indicates that the tab is now "off". */
+        /** Returns True if the tab is now the source. If both **source** and **dest** return False it indicates that the tab is now "off". */
         source: boolean;
-        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  The string can contain any or all of the following: shift ctrl, alt, lwin, rwin  If no qualifiers were down, the string will be: none */
+        /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  
+         * 
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*.
+         * 
+         * If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
-        /** Returns a Tab object representing the tab. */
+        /** Returns a {@link Tab} object representing the tab. */
         tab: Tab;
     }
 
@@ -4554,17 +4826,17 @@ declare global {
     }
 
     interface StringSet {
-        /** Returns the number of elements the StringSet currently holds. */
+        /** Returns the number of elements the **StringSet** currently holds. */
         count: number;
-        /** Returns True if the StringSet is empty, False if not. */
+        /** Returns True if the **StringSet** is empty, False if not. */
         empty: boolean;
-        /** A synonym for count. */
+        /** A synonym for **count**. */
         length: number;
-        /** A synonym for count. */
+        /** A synonym for **count**. */
         size: number;
-        /** Copies the contents of another StringSet to this one. You can also pass an array of strings or Vector object. */
+        /** Copies the contents of another **StringSet** to this one. You can also pass an array of strings or {@link Vector} object. */
         assign(from: StringSet): void;
-        /** Clears the contents of the StringSet. */
+        /** Clears the contents of the **StringSet**. */
         clear(): void;
         /** Erases the string if it exists in the set. */
         erase(arg0: string): void;
@@ -4572,7 +4844,7 @@ declare global {
         exists(arg0: string): boolean;
         /** Inserts the string into the set if it doesn't already exist. Returns True if successful. */
         insert(arg0: string): boolean;
-        /** Merges the contents of another StringSet with this one. */
+        /** Merges the contents of another **StringSet** with this one. */
         merge(from: StringSet): void;
     }
 
@@ -4580,37 +4852,37 @@ declare global {
         /**
          * Decodes an encoded string or data.
          *
-         * You can provide either a Blob object or a string as the source to decode.
-         * Depending on the value of the format argument, either a string or a Blob is returned.
+         * You can provide either a {@link Blob} object or a string as the source to decode.
+         * Depending on the value of the *format* argument, either a string or a {@link Blob} is returned.
          *
          * Valid formats:
-         *  - "base64"      : Base64-decoded, returns a Blob
-         *  - "quoted"      : Quoted-printable-decoded, returns a Blob
-         *  - "utf-8"       : UTF-8 to native string
-         *  - "utf-16", "utf-16-le" : UTF-16 LE to native string
-         *  - "utf-16-be"   : UTF-16 BE to native string
-         *  - "auto"        : special handling (MIME-encoded subjects, BOM detection, etc.)
-         *  - A valid code-page name (e.g. "**gb2312**", "**utf-8**" ...) or ID (e.g. **936**, **65001**, ...)
+         *  - "base64"      : The source will be *Base64*-decoded, returns a {@link Blob}
+         *  - "quoted"      : The source will be *Quoted-printable*-decoded, returns a {@link Blob}
+         *  - "utf-8"       : The source will be converted from UTF-8 to a native string
+         *  - "utf-16", "utf-16-le" : The source will be converted from UTF-16 LE to a native string
+         *  - "utf-16-be"   : The source will be converted from UTF-16 BE to native string
+         *  - "auto"        : Special handling is invoked to decode a MIME-encoded email subject (e.g. one beginning with **=?**)and a string is returned if identified. It will also detect UTF-8 or UTF-16 encoded data if it has a BOM at the beginning.
+         *  - A valid code-page name (e.g. "**gb2312**", "**utf-8**" ...) or ID (e.g. **936**, **65001**, ...)         
          *
-         * If format is not specified, the default is "auto".
-         * 
          * If decoding UTF-8 or UTF-16 (via "**auto**" or "**utf-8**", etc.), any byte-order-mark (BOM) will be skipped if one exists at the beginning of the input data.
+         *
+         * If *format* is not specified, the default is "auto". Otherwise, *format* must be set to one of the above keywords or a valid code-page name (e.g. **"gb2312"**, **"utf-8"**), or a Windows code-page ID (e.g. **936**, **65001**). The source will be decoded using the specified code-page and a string is returned.
          */
         Decode(source: Blob | string, format?: 'base64' | 'quoted' | 'utf-8' | 'utf-16' | 'utf-16-le' | 'utf-16-be' | 'auto' | string): string | Blob;
         /**
          * Encodes a string or data.
          *
-         * You can provide either a Blob object or a string as the source to encode.
+         * You can provide either a {@link Blob} object or a string as the *source* to encode.
          * Depending on the value of the format argument, either a string or a Blob is returned.
          *
          * Valid formats:
-         *  - "base64"    : Base64-encoded, returns a string
-         *  - "quoted"    : Quoted-printable-encoded, returns a string
-         *  - "utf-8"     : UTF-8 without BOM
-         *  - "utf-8 bom" : UTF-8 with BOM
-         *  - "utf-16", "utf-16-le" (+ "bom" variants)
-         *  - "utf-16-be" (+ "bom" variants)
-         *  - Otherwise, a valid code-page name (e.g. "**gb2312**", "**utf-8**" etc.), or a Windows code-page ID (e.g. **936**, **65001**). The source will be encoded using the specified code-page and a Blob is returned.
+         *  - "base64"    : The source will be *Base64*-encoded, returns a string
+         *  - "quoted"    : The source will be *Quoted-printable*-encoded, returns a string
+         *  - "utf-8"     : The source will be converted to UTF-8 without BOM
+         *  - "utf-8 bom" : The source will be converted to UTF-8 with BOM
+         *  - "utf-16", "utf-16-le" (+ "bom" variants) : The source will be converted to UTF-16 Little Endian
+         *  - "utf-16-be" (+ "bom" variants) : The source will be converted to UTF-16
+         *  - Otherwise, a valid code-page name (e.g. "**gb2312**", "**utf-8**" etc.), or a Windows code-page ID (e.g. **936**, **65001**). The source will be encoded using the specified code-page and a {@link Blob} is returned.
          */
         Encode(source: Blob | string, format: string): string | Blob;
         /** Tests the input string to see if it only contains characters that can be represented in ASCII. 
@@ -4656,23 +4928,23 @@ declare global {
          *  - 2 : truncate in the middle
          *
          * If not specified, the default is:
-         *  - 2 if input is a Path object
-         *  - 0 otherwise
+         *  - **2** if input is a {@link Path} object
+         *  - **0** otherwise
          *
-         * If input is a Path and middle truncation is selected, the function takes
+         * If input is a {@link Path} and middle truncation is selected, the function takes
          * path separators into account correctly.
          */
         Truncate(input: string | Path, length: number, type?: number): string;
     }
 
     interface StyleSelectedData {
-        /** Returns a Lister object representing the Lister that changing style. */
+        /** Returns a {@link Lister} object representing the Lister that changing style. */
         lister: Lister;
         /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  
          * 
-         * The string can contain any or all of the following: `shift`, `ctrl`, `alt`, `lwin`, `rwin`.
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*.
          * 
-         * If no qualifiers were down, the string will be: none */
+         * If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
         /** Returns the name of the newly selected style. */
         style: string;
@@ -4681,7 +4953,7 @@ declare global {
     interface SysInfo {
         /** Returns true if Dark Mode is on within Opus, and false otherwise. 
          * 
-         * May differ from DarkModeApps if Opus is configured to override the system-wide setting, or on older versions of Windows which did not have Dark Mode. */
+         * May differ from **DarkModeApps** if Opus is configured to override the system-wide setting, or on older versions of Windows which did not have Dark Mode. */
         DarkMode(): boolean;
         /** Returns true if Windows is configured to run applications in Dark Mode, and false otherwise. 
          * 
@@ -4695,22 +4967,21 @@ declare global {
         Language(): string;
         /** Returns the number of open Listers. */
         ListerCount(): number;
-        /** Returns a Vector of Rect objects which provide information about the positions and sizes of the display monitors in the system. 
+        /** Returns a {@link Vector} of {@link Rect} objects which provide information about the positions and sizes of the display monitors in the system. 
          * 
          * The **WorkAreas** method is sometimes what you should use instead of this. */
         Monitors(): Vector<Rect>;
-        /** Returns a single Rect with the information for just a particular monitor. 
+        /** Returns a single {@link Rect} with the information for just a particular monitor. 
          * 
          * The **WorkAreas** method is sometimes what you should use instead of this. */
         Monitors(index: number): Rect;
-        /** Returns the index of the monitor the mouse pointer is currently positioned on. */
         /** Returns the index of the monitor the mouse pointer is currently positioned on. */
         MouseMonitor(): number;
         /** Returns the current x-coordinate of the mouse pointer. */
         MousePosX(): number;
         /** Returns the current y-coordinate of the mouse pointer. */
         MousePosY(): number;
-        /** Returns a Rect giving the size of the invisible border around windows. 
+        /** Returns a {@link Rect} giving the size of the invisible border around windows. 
          * 
          * On some operating systems (e.g. Windows 10), windows may be larger than they appear: Beyond the visible edge is a border that is part of the window but invisible. This border exists for legacy compatibility, allowing window frames to appear thin while providing something thick enough to resize with the mouse. 
          * 
@@ -4722,7 +4993,7 @@ declare global {
          * 
          * This property is relatively expensive to calculate. You should not, for example, call the method once for each side; instead, call it once and store the **Rect** in a variable, then query that for each side. */
         ShadowBorder(): Rect;
-        /** Returns the DPI that the system is currently running in (e.g. 96 DPI is 100% scaling). This will normally be the same as the DPI value, but if the system DPI has been changed and Opus has not been restarted they can be different. */
+        /** Returns the DPI that the system is currently running in (e.g. 96 DPI is 100% scaling). This will normally be the same as the **DPI** value, but if the system DPI has been changed and Opus has not been restarted they can be different. */
         SystemDPI(): number;
         /** Returns True if the system is currently using touch input. */
         TouchInput(): boolean;
@@ -4734,7 +5005,7 @@ declare global {
         WorkAreas(): Vector<Rect>;
          /** Similar to the **Monitors** method except it returns the work area of each monitor rather than the full monitor area. 
          * 
-         * A monitor's work area is the monitor's rectangle minus the Windows Taskbar and any other app bars (which can include docked toolbars created by Opus, or similar things added by other software). If a monitor does not have a Taskbar or other app bar docked to it, its work area will be the same as its full rectangle. */
+         * A monitor's work area is the monitor's rectangle minus the Windows Taskbar and any other *app bars* (which can include docked toolbars created by Opus, or similar things added by other software). If a monitor does not have a Taskbar or other app bar docked to it, its work area will be the same as its full rectangle. */
         WorkAreas(index: number): Rect;
     }
 
@@ -4746,8 +5017,8 @@ declare global {
          * - dwmcomposition      : Indicates that Windows DWM composition has been turned on or off.
          * - dwmcolorization     : Indicates that Windows DWM colorization has been changed.
          * - intl                : The system locale has changed.
-         * - userinteractionmode : The system input method has changed (from mouse to touch or vice versa). The current method can be queried via the SysInfo.TouchInput method.
-         * - spacingscheme       : Indicates that the UI spacing scheme has changed. The new scheme name is available in the name property. You can also query the scheme using the DOpus.spacingscheme property.
+         * - userinteractionmode : The system input method has changed (from mouse to touch or vice versa). The current method can be queried via the {@link SysInfo.TouchInput} method.
+         * - spacingscheme       : Indicates that the UI spacing scheme has changed. The new scheme name is available in the name property. You can also query the scheme using the {@link DOpus.spacingscheme} property.
          * - windowmetrics       : System window metrics have changed (e.g. font size).
          */
         type: string;
@@ -4756,19 +5027,19 @@ declare global {
     }
 
     interface Tab {
-        /** Returns an Items object that represents all the files and folders currently displayed in this tab. 
+        /** Returns an {@link Items} object that represents all the files and folders currently displayed in this tab. 
          * 
-         * Note: The first time a script accesses this property (and all the other properties that return an Items object), a snapshot is taken of all the appropriate items. If the script then makes changes to those items (e.g. by creating a new file, modifying the selection, etc), these changes will not be reflected by the collection. To re-synchronize the collection call the **Update** method on the object. */
+         * Note: The first time a script accesses this property (and all the other properties that return an {@link Items} object), a snapshot is taken of all the appropriate items. If the script then makes changes to those items (e.g. by creating a new file, modifying the selection, etc), these changes will not be reflected by the collection. To re-synchronize the collection call the **Update** method on the object. */
         all: Items;
-        /** Returns a collection of Path objects that represents the paths in the "backward" history list for this tab (i.e. the folders you would get to by clicking the Back button). */
+        /** Returns a collection of {@link Path} objects that represents the paths in the "backward" history list for this tab (i.e. the folders you would get to by clicking the *Back* button). */
         backlist: Path[];
         /** Returns the tab's assigned color (if one has been assigned via, for example, the `Go TABCOLOR` command). The color is returned as a string in R,G,B format. */
         color: string;
         /** Returns the current path from the tab's breadcrumb control (if it has one), including any ghost path. */
         crumbpath: Path;
-        /** Returns True if this tab is currently the destination, and False otherwise.
+        /** Returns True if this tab is currently the **destination**, and False otherwise.
          * 
-         * Note that you cannot always assume a tab is the source if it is not the destination. Use the separate source property for that. */
+         * Note that you cannot always assume a tab is the source if it is not the destination. Use the separate **source** property for that. */
         dest: boolean;
         /** Returns an {@link Items} object that represents all the folders currently displayed in this tab. */
         dirs: Items;
@@ -4776,74 +5047,74 @@ declare global {
         dirty: boolean;
         /** Returns the currently displayed label of this tab. */
         displayed_label: string;
-        /** Returns a collection of FileGroup objects that represents all the file groups in the tab (when the tab is grouped). You can use the format.group_by property to test if the tab is grouped or not. */
+        /** Returns a collection of {@link FileGroup} objects that represents all the file groups in the tab (when the tab is grouped). You can use the **format.group_by** property to test if the tab is grouped or not. */
         filegroups: FileGroup[];
-        /** Returns an Items object that represents all the files currently displayed in this tab. */
+        /** Returns an {@link Items} object that represents all the files currently displayed in this tab. */
         files: Items;
-        /** Returns a Format object representing the current folder format in this tab. */
+        /** Returns a {@link Format} object representing the current folder format in this tab. */
         format: Format;
-        /** Returns a collection of Path objects that represents the paths in the "forward" history list for this tab (i.e. the folders you would get to by clicking the Forward button). */
+        /** Returns a collection of {@link Path} objects that represents the paths in the "forward" history list for this tab (i.e. the folders you would get to by clicking the *Forward* button). */
         forwardlist: Path[];
-        /** Returns an Items object that represents all the files and folders currently hidden from this tab. */
+        /** Returns an {@link Items} object that represents all the files and folders currently hidden from this tab. */
         hidden: Items;
-        /** Returns an Items object that represents all the folders currently hidden from this tab. */
+        /** Returns an {@link Items} object that represents all the folders currently hidden from this tab. */
         hidden_dirs: Items;
-        /** Returns an Items object that represents all the files currently hidden from this tab */
+        /** Returns an {@link Items} object that represents all the files currently hidden from this tab */
         hidden_files: Items;
-        /** Returns an Items object that represents all the files and folders currently displayed in this tab that have one or more cells highlighted. */
+        /** Returns an {@link Items} object that represents all the files and folders currently displayed in this tab that have one or more cells highlighted. */
         highlighted: Items;
-        /** Returns the current assigned tab label. Note that this may be an empty string if no custom label has been assigned. The displayed_label property returns the currently displayed label in all cases. */
+        /** Returns the current assigned tab label. Note that this may be an empty string if no custom label has been assigned. The **displayed_label** property returns the currently displayed label in all cases. */
         label: string;
         /** If this tab is linked to another tab, returns a {@link Tab} object representing the linked tab. If this tab is not linked this property returns **0**. */
         linktab: Tab;
-        /** Returns a Lister object representing the parent Lister that owns this tab. */
+        /** Returns a {@link Lister} object representing the parent Lister that owns this tab. */
         lister: Lister;
         /** Returns the current lock state of the tab; one of "**off**", "**on**", "**changes**", "**reuse**". */
         lock: 'off' | 'on' | 'changes' | 'reuse';
-        /** Returns True if this tab is linked in Navigation Lock mode. This property does not exist if the tab is not linked, so make sure you check the value of linktab first. */
+        /** Returns True if this tab is linked in Navigation Lock mode. This property does not exist if the tab is not linked, so make sure you check the value of **linktab** first. */
         navlock: boolean;
         /** Returns the current path shown in this tab. */
         path: Path;
-        /** Returns a QuickFilter object providing information about the state of the quick filter in this tab. */
+        /** Returns a {@link QuickFilter} object providing information about the state of the quick filter in this tab. */
         quickfilter: QuickFilter;
         /** Returns True if this tab is currently on the right or bottom side of a dual-display Lister, and False otherwise. */
         right: boolean;
-        /** Returns an Items object that represents all the selected files and folders currently displayed in this tab. Note that if checkbox mode is turned on in the tab, this will be a collection of checked items rather than selected. */
+        /** Returns an {@link Items} object that represents all the selected files and folders currently displayed in this tab. Note that if **checkbox mode** is turned on in the tab, this will be a collection of checked items rather than selected. */
         selected: Items;
-        /** Returns an Items object that represents all the selected folders currently displayed in this tab. */
+        /** Returns an {@link Items} object that represents all the selected folders currently displayed in this tab. */
         selected_dirs: Items;
-        /** Returns an Items objects that represents all the selected files currently displayed in this tab */
+        /** Returns an {@link Items} object that represents all the selected files currently displayed in this tab */
         selected_files: Items;
-        /** Returns a TabStats object that provides various information about the tab, including the number of files, number of selected files, total size of selected files, etc. The "selected" counts provided by this object take checkbox mode into account (that is, if checkbox mode is currently turned on, the counts will be for checked files rather than for selected files). */
+        /** Returns a {@link TabStats} object that provides various information about the tab, including the number of files, number of selected files, total size of selected files, etc. The "selected" counts provided by this object take checkbox mode into account (that is, if checkbox mode is currently turned on, the counts will be for checked files rather than for selected files). */
         selstats: TabStats;
         /** Returns True if this tab is currently the source, and False otherwise. 
          * 
-         * Note that you cannot always assume a tab is the destination if it is not the source. Use the separate dest property for that. */
+         * Note that you cannot always assume a tab is the destination if it is not the source. Use the separate **dest** property for that. */
         source: boolean;
-        /** Returns a TabStats object that provides various information about the tab, including the number of files, number of selected files, total size of selected files, etc. Unlike selstats, this object does not take checkbox mode into account (so the "selected" counts will refer to selected rather than checked files). */
+        /** Returns a {@link TabStats} object that provides various information about the tab, including the number of files, number of selected files, total size of selected files, etc. Unlike selstats, this object does not take checkbox mode into account (so the "selected" counts will refer to selected rather than checked files). */
         stats: TabStats;
-        /** Returns an UnresolvedFiles object that provides unresolved versions of all the different file collections available through this object (all, dirs, files, hidden, hidden_dirs, hidden_files, highlighted, selected_dirs, selected_files). This is mostly useful with file collections which normally return the resolved path - accessing through the unresolved objects will return the native coll:// paths instead. */
+        /** Returns an {@link UnresolvedFiles} object that provides *unresolved* versions of all the different file collections available through this object (all, dirs, files, hidden, hidden_dirs, hidden_files, highlighted, selected_dirs, selected_files). This is mostly useful with file collections which normally return the resolved path - accessing through the unresolved objects will return the native coll:// paths instead. */
         unresolved: UnresolvedFiles;
-        /** Returns an UnsortedFiles object that provides unsorted versions of all the different file collections available through this object (all, dirs, files, hidden, hidden_dirs, hidden_files, highlighted, selected_dirs, selected_files). This is mostly useful with expanded sub-folders or FlatView mode, which normally depth-sort the returned files (deepest first) - accessing through the unsorted objects will return files in the order they appear in the file display. 
+        /** Returns an {@link UnsortedFiles} object that provides unsorted versions of all the different file collections available through this object (all, dirs, files, hidden, hidden_dirs, hidden_files, highlighted, selected_dirs, selected_files). This is mostly useful with expanded sub-folders or FlatView mode, which normally depth-sort the returned files (deepest first) - accessing through the unsorted objects will return files in the order they appear in the file display. 
          * 
          * You can also use `unsorted.unresolved` to access an unsorted/unresolved set of file collections. */
         unsorted: UnsortedFiles;
-        /** This Vars object represents all defined variables with tab scope (that are scoped to this tab). */
+        /** This {@link Vars} object represents all defined variables with *tab scope* (that are scoped to this tab). */
         vars: Vars;
-        /** Returns True if this tab is currently visible (i.e. it is the active tab in either file display), and False otherwise. */
+        /** Returns True if this tab is currently visible (i.e. it is the active tab in either file display), and False *otherwise*. */
         visible: boolean;
         /** Call this method from a FAYT extension script to clear the FAYT field. If the FAYT is open it clears any current text leaving only the quick key behind at the start. */
         ClearFAYT(): void;
         /** Call this method from a FAYT extension script to forcibly close the FAYT field. */
         CloseFAYT(): void;
-        /** Creates a new Dialog object, that lets you display dialogs and popup menus. The dialog's window property will be automatically assigned to this tab. */
+        /** Creates a new {@link Dialog} object, that lets you display dialogs and popup menus. The dialog's window property will be automatically assigned to this tab. */
         Dlg(): Dialog;
         /** Returns an {@link Item} object representing the file or folder which has focus in the tab. 
          * 
          * The focus item is typically indicated by an outline around its name, and is usually the last item which was clicked on, or the last item which was moved to with the keyboard. 
          * The focus item is often also selected, but not always; focus and selection are two different things. 
          * 
-         * If no focus item exists, or if the focus item is a special file or folder, such as *This PC*, which cannot be represented by an **Item** object, then this method does not return an object. (In JScript, test if the result ***== null*** and in VBScript test if the result ***is nothing***.) */
+         * If no focus item exists, or if the focus item is a special file or folder, such as *This PC*, which cannot be represented by an {@link Item} object, then this method does not return an object. (In JScript, test if the result ***== null*** and in VBScript test if the result ***is nothing***.) */
         GetFocusItem(): Item;
         /** Displays a notification message associated with this tab. 
          * 
@@ -4876,44 +5147,46 @@ declare global {
     interface TabClickData {
         /** Returns a string indicating any qualifier keys that were held down by the user when the event was triggered.  
          * 
-         * The string can contain any or all of the following: **shift**, **ctrl**, **alt**, **lwin**, **rwin**.  If no qualifiers were down, the string will be: none */
+         * The string can contain any or all of the following: *shift*, *ctrl*, *alt*, *lwin*, *rwin*.
+         * 
+         * If no qualifiers were down, the string will be: *none* */
         qualifiers: string;
         /** Returns a {@link Tab} object representing the tab that was clicked. */
         tab: Tab;
     }
 
     interface TabGroup {
-        /** True if the **Close existing folder tabs when opening this group** option is turned on for this group. Only present when the **folder** property is False. */
+        /** True if the **Close existing folder tabs when opening this group** option is turned on for this group. Only present when the *folder* property is False. */
         closeexisting: boolean;
-        /** The description of this tab group, if any. Only present when the **folder** property is False. */
+        /** The description of this tab group, if any. Only present when the *folder* property is False. */
         desc: string;
-        /** True if the **Define tabs on specific sides of a dual-display Lister** option is turned on for this group. Only present when the **folder** property is False. */
+        /** True if the **Define tabs on specific sides of a dual-display Lister** option is turned on for this group. Only present when the *folder* property is False. */
         dual: boolean;
         /** True if this object represents a folder within the tab group list, False if it's an actual tab group. */
         folder: boolean;
         /** True if this tab group or folder should be hidden from menus which list tab groups. The group will still always be visible in Preferences. */
         hidden: boolean;
-        /** Returns a {@link TabGroupTabList} object representing the tabs in this group that open in the left/top side of a dual-display Lister. Only present when the folder property is False and the dual property is True. */
+        /** Returns a {@link TabGroupTabList} object representing the tabs in this group that open in the left/top side of a dual-display Lister. Only present when the *folder* property is False and the *dual* property is True. */
         lefttabs: TabGroupTabList;
         /** The name of this group or folder. */
         name: string;
-        /** Returns a {@link TabGroupTabList} object representing the tabs in this group that open in the right/bottom side of a dual-display Lister. Only present when the folder property is False and the dual property is True. */
+        /** Returns a {@link TabGroupTabList} object representing the tabs in this group that open in the right/bottom side of a dual-display Lister. Only present when the *folder* property is False and the *dual* property is True. */
         righttabs: TabGroupTabList;
-        /** Returns a {@link TabGroupTabList} object representing the tabs in this group. Only present when both the folder and dual properties are False. */
+        /** Returns a {@link TabGroupTabList} object representing the tabs in this group. Only present when both the *folder* and *dual* properties are False. */
         tabs: TabGroupTabList;
-        /** Adds a new sub-folder to this tab group folder. Only available when the folder property is True. You can either provide a TabGroup object (which itself has the folder property set to True) or the name for the new folder. If the operation succeeds a TabGroup object is returned which represents the new folder. If the operation fails False is returned. */
+        /** Adds a new sub-folder to this tab group folder. Only available when the *folder* property is True. You can either provide a TabGroup object (which itself has the folder property set to True) or the name for the new folder. If the operation succeeds a TabGroup object is returned which represents the new folder. If the operation fails False is returned. */
         AddChildFolder(TabGrouporstring: object): TabGroup;
-        /** Adds a new tab group to this tab group folder. Only available when the folder property is True. You can either provide a TabGroup object or the name for the new group. If the operation succeeds a TabGroup object is returned which represents the new tab group. If the operation fails False is returned. */
+        /** Adds a new tab group to this tab group folder. Only available when the *folder* property is True. You can either provide a TabGroup object or the name for the new group. If the operation succeeds a TabGroup object is returned which represents the new tab group. If the operation fails False is returned. */
         AddChildGroup(TabGrouporstring: object): TabGroup;
         /** Deletes the child item (folder or tab group). */
         DeleteChild(TabGroup: object): void;
         /** Returns a duplicate of this tab group or folder. When it's returned the duplicate has not yet been added to a tab list. */
         Duplicate(): TabGroup;
-        /** In a tab group that has specific left and right tabs specified, this method links together a tab from the left side and a tab from the right side. Only available if the dual property is set to True. You can provide {@link TabGroupTabEntry} objects or the index numbers of the tabs you want to link. 
+        /** In a tab group that has specific left and right tabs specified, this method links together a tab from the left side and a tab from the right side. Only available if the *dual* property is set to True. You can provide {@link TabGroupTabEntry} objects or the index numbers of the tabs you want to link. 
          * 
-         * The optional type parameter can be set to "slave" to specify that the tabs should be slaved to each other. */
+         * The optional *type* parameter can be set to **"s**lave" to specify that the tabs should be slaved to each other. */
         Link(TabGroupTabEntry: object, TabGroupTabEntry: object, type?: string): void;
-        /** Unlinks the specified tab from its partner. Only available if the **dual** property is set to True. */
+        /** Unlinks the specified tab from its partner. Only available if the *dual* property is set to True. */
         Unlink(TabGroupTabEntry: object): void;
     }
 
@@ -4968,11 +5241,11 @@ declare global {
         color: string;
         /** Returns the folder format of this tab. */
         format: Format;
-        /** Returns the link ID of this tab, if it is linked to another tab. Both tabs will have the same link ID but otherwise the value is meaningless. Use the TabGroup.Link and Unlink methods to change tab linkage. */
+        /** Returns the link ID of this tab, if it is linked to another tab. Both tabs will have the same link ID but otherwise the value is meaningless. Use the {@link TabGroup.Link} and {@link TabGroup.Unlink|Unlink} methods to change tab linkage. */
         linkid: number;
-        /** If this tab is linked as a slave, returns the string "slave". */
+        /** If this tab is linked as a slave, returns the string **"slave"**. */
         linktype: string;
-        /** Returns the lock type of this tab. Valid values are "**on**", "**off**", "**changes**" and "**reuse**". */
+        /** Returns the lock type of this tab. Valid values are **"on"**, **"off"**, **"changes"** and **"reuse"**. */
         locked: 'off' | `on` | 'changes' | 'reuse';
         /** Returns the name of this tab if one is assigned. Tabs that don't have specific names assigned will usually show the last component of the path as their name. */
         name: string;
@@ -4985,18 +5258,18 @@ declare global {
     interface TabGroupTabList {
         /** Returns a {@link TabGroupTabEntry} object representing the active (default) folder tab in this tab list. */
         active: TabGroupTabEntry;
-        /** Adds a folder tab entry to this list. You can provide a   {@link TabGroupTabEntry} object, or the path and optional name of the new folder tab. */
+        /** Adds a folder tab entry to this list. You can provide a {@link TabGroupTabEntry} object, or the *path* and optional *name* of the new folder tab. */
         AddTab(tabGroupTabEntry: TabGroupTabEntry): TabGroupTabEntry;
-        /** Adds a folder tab entry to this list. You can provide a   {@link TabGroupTabEntry} object, or the path and optional name of the new folder tab. */
+        /** Adds a folder tab entry to this list. You can provide a {@link TabGroupTabEntry} object, or the *path* and optional *name* of the new folder tab. */
         AddTab(path: string, name?: string): TabGroupTabEntry;
-        /** Deletes a folder tab entry from this list. You can provide a   {@link TabGroupTabEntry} object, or the index of the tab entry to delete. If you specify the index as -1 then all tab entries will be deleted. */
+        /** Deletes a folder tab entry from this list. You can provide a {@link TabGroupTabEntry} object, or the index of the tab entry to delete. If you specify the index as -1 then all tab entries will be deleted. */
         DeleteTab(tabEntryOrIndex: TabGroupTabEntry | number): void;
-        /** Inserts a folder tab entry to this list. You can provide a   {@link TabGroupTabEntry} object, or the path and optional name of the new folder tab. The final parameter must be the index indicating the desired insertion position. */
+        /** Inserts a folder tab entry to this list. You can provide a {@link TabGroupTabEntry} object, or the *path* and optional *name* of the new folder tab. The final parameter must be the index indicating the desired insertion position. */
         InsertTabAt(tabGroupTabEntry: TabGroupTabEntry, index: number): TabGroupTabEntry;
-        /** Inserts a folder tab entry to this list. You can provide a   {@link TabGroupTabEntry} object, or the path and optional name of the new folder tab. The final parameter must be the index indicating the desired insertion position. */
+        /** Inserts a folder tab entry to this list. You can provide a {@link TabGroupTabEntry} object, or the *path* and optional *name* of the new folder tab. The final parameter must be the index indicating the desired insertion position. */
         InsertTabAt(path: string, name?: string, index: number): TabGroupTabEntry;
         /** Moves the specified tab entry to a new position, and optionally a new tab list. If the second parameter is a {@link TabGroupTabList} object then the tab entry will be moved to that list. The final parameter must be the index indicating the desired insertion position. */
-        MoveTabTo(tabGroupTabEntry: TabGroupTabEntry, destTabGroupTabList: TabGroupTabList, index: number): void;
+        MoveTabTo(tabGroupTabEntry: TabGroupTabEntry, destTabGroupTabList?: TabGroupTabList, index: number): void;
     }
 
     interface TabStats {
@@ -5073,11 +5346,11 @@ declare global {
         listers: Lister[];
         /** Returns a collection of {@link Dock} objects representing any currently floating instances of this toolbar. */
         docks: Dock[];
-        /** Returns a string indicating the group (position) of a particular instance of this toolbar. The returned string will be one of top, bottom, left, right, center, fdright, fdbottom, tree. */
+        /** Returns a *string* indicating the group (position) of a particular instance of this toolbar. The returned string will be one of *top*, *bottom*, *left*, *right*, *center*, *fdright*, *fdbottom*, *tree*. */
         group: string;
         /** Returns the line number within the toolbar's group that it resides on. For example, the first toolbar at the top of the Lister would have a line of 0. */
         line: number;
-        /** Returns the pixel position from the left/top of the toolbar's line. If there are two or more toolbars with the same line number, the pos value determines the order they appear in. */
+        /** Returns the pixel position from the left/top of the toolbar's line. If there are two or more toolbars with the same **line** number, the **pos** value determines the order they appear in. */
         pos: number;
         /** Default Value.
          * Returns the name of the toolbar.
@@ -5098,10 +5371,35 @@ declare global {
          * 
          * If there is only one FDB toolbar configured (the usual case), it is returned as a simple string.
          * 
-         * If more than one FDB toolbar is configured, a {@link Vector} of strings is returned.  You can use `DOpus.toolbars.fdb(0)` in both JScript and VBScript if you just want the name of the first toolbar without worrying about whether the number of other toolbars (if any). Otherwise, use **TypeName(…)** in VBScript and **typeof** in JScript to determine the return type. */
-        fdb: string;
+         * If more than one FDB toolbar is configured, a {@link Vector} of strings is returned.  
+         * 
+         * You can use `DOpus.toolbars.fdb(0)` in both JScript and VBScript if you just want the name of the first toolbar without worrying about whether the number of other toolbars (if any). Otherwise, use **TypeName(…)** in VBScript and **typeof** in JScript to determine the return type. */
+        fdb: string | Vector<string>;
         /** Returns the name of the currently selected Viewer Toolbar. */
         viewer: string;
+    }
+
+    interface UnorderedSet {
+        /** Returns the number of elements the **UnorderedSet** currently holds. */
+        count: number;
+        /** Returns True if the **UnorderedSet** is empty, False if not. */
+        empty: boolean;
+        /** A synonym for **count**. */
+        length: number;
+        /** A synonym for **count**. */
+        size: number;
+        /** Copies the contents of another {@link UnorderedSet} to this one. You can also pass an array or {@link Vector} object. */
+        assign(from: UnorderedSet): void;
+        /** Clears the contents of the **UnorderedSet**. */
+        clear(): void;
+        /** Erases the element if it exists in the set. */
+        erase(element: any): void;
+        /** Returns True if the specified element exists in the set. */
+        exists(element: any): boolean;
+        /** Inserts the element into the set if it doesn't already exist. Returns True if successful. */
+        insert(element: any): boolean;
+        /** Merges the contents of another **UnorderedSet** with this one. */
+        merge(from: UnorderedSet): void;
     }
 
     /**
@@ -5168,29 +5466,6 @@ declare global {
         selected_files: Items;
         /** Returns an {@link UnresolvedFiles} object that provides unresolved, unsorted file collections. */
         unresolved: UnresolvedFiles;
-    }   
-
-    interface UnorderedSet {
-        /** Returns the number of elements the **UnorderedSet** currently holds. */
-        count: number;
-        /** Returns True if the **UnorderedSet** is empty, False if not. */
-        empty: boolean;
-        /** A synonym for **count**. */
-        length: number;
-        /** A synonym for **count**. */
-        size: number;
-        /** Copies the contents of another {@link UnorderedSet} to this one. You can also pass an array or {@link Vector} object. */
-        assign(from: UnorderedSet): void;
-        /** Clears the contents of the **UnorderedSet**. */
-        clear(): void;
-        /** Erases the element if it exists in the set. */
-        erase(element: any): void;
-        /** Returns True if the specified element exists in the set. */
-        exists(element: any): boolean;
-        /** Inserts the element into the set if it doesn't already exist. Returns True if successful. */
-        insert(element: any): boolean;
-        /** Merges the contents of another **UnorderedSet** with this one. */
-        merge(from: UnorderedSet): void;
     }
 
     interface Var {
@@ -5225,7 +5500,7 @@ declare global {
         toString(): string;
         /** Default Value.
          * The default value of the Var object returns the value of the variable itself, with one exception. 
-         * If the Var object is being accessed as part of an enumeration of the Vars collection, the default value returns the variable name.
+         * If the Var object is being accessed as part of an enumeration of the {@link Vars} collection, the default value returns the variable name.
          * 
          * So for instance,
          * ```
@@ -5284,25 +5559,25 @@ declare global {
 
     interface Vector<T = any> {
         [index: number]: T;
-        /** Returns the capacity of the Vector (the number of elements it can hold without having to reallocate memory). This is not the same as the number of elements it currently holds, which can be 0 even if the capacity is something larger. */
+        /** Returns the capacity of the **Vector** (the number of elements it can hold without having to reallocate memory). This is not the same as the number of elements it currently holds, which can be 0 even if the capacity is something larger. */
         capacity: number;
-        /** Returns the number of elements the Vector currently holds. */
+        /** Returns the number of elements the **Vector** currently holds. */
         count: number;
-        /** Returns True if the Vector is empty, False if not. */
+        /** Returns True if the **Vector** is empty, False if not. */
         empty: boolean;
-        /** A synonym for count. */
+        /** A synonym for **count**. */
         length: number;
-        /** A synonym for count. */
+        /** A synonym for **count**. */
         size: number;
         /** Copies the values of another *Vector* to the end of this one, preserving the existing values as well. If *start* and *end* are not provided, the entire Vector is appended - otherwise, only the specified elements are appended. 
          * 
-         * Instead of a Vector object you can also pass a collection to this method and the contents of the collection will be copied to the end of the Vector.
+         * Instead of a Vector object you can also pass a *collection* to this method and the contents of the collection will be copied to the end of the Vector.
          * 
          * In *JScript* you can pass a standard array to this method to copy the array to the end of a Vector. */
         append(from: Vector | any[], start?: number, end?: number): void;
         /** Copies the value of another **Vector** to this one. If start and end are not provided, the entire **Vector** is copied - otherwise, only the specified elements are copied. 
          * 
-         * Instead of a Vector object you can also pass a collection to this method and the contents of the collection will be copied to the Vector. 
+         * Instead of a Vector object you can also pass a *collection* to this method and the contents of the collection will be copied to the Vector. 
          * 
          * In *JScript* you can pass a standard array to this method to copy the array into a **Vector**. */
         assign(from: Vector, start?: number, end?: number): void;
@@ -5342,20 +5617,19 @@ declare global {
     interface Version {
         /** The current build number. */
         build: number;
-        /** The current module version (the version of dopus.exe itself). You can also enumerate or index this as a collection:number to retrieve the individual four digits of the module version. */
+        /** The current module version (the version of **dopus.exe** itself). You can also enumerate or index this as a *collection:number* to retrieve the individual four digits of the module version. */
         module: string;
-        /** The current product version (the release version of Directory Opus as a whole). You can also enumerate or index this as a collection:number to retrieve the individual four digits of the product version. */
+        /** The current product version (the release version of Directory Opus as a whole). You can also enumerate or index this as a *collection:number* to retrieve the individual four digits of the product version. */
         product: string;
         /** Returns a {@link WinVer} object which provides information about the current version of Windows. */
         winver: WinVer;
-        /** Returns True if the current version of Opus is the specified version or greater. You can specify the major version only (e.g. "11"), a major and minor version (e.g. "11.3") or a specific beta version (e.g. "11.3.1"). */
+        /** Returns True if the current version of Opus is the specified version or greater. You can specify the major version only (e.g. *"11"*), a major and minor version (e.g. *"11.3"*) or a specific beta version (e.g. *"11.3.1")*. */
         AtLeast(version: string): boolean;
         /** Default Value.
          * Full version string (as shown in the About dialog).
          */
         toString(): string;
         /** Default Value.
-         * Full version string (as shown in the About dialog).
          */
         valueOf(): string;
     }
@@ -5397,9 +5671,9 @@ declare global {
         parentlisterlinked: boolean;
         /** Returns a {@link Tab} object representing the tab that launched the viewer (if there was one, and if it still exists) or, if viewer re-use is enabled, last sent files to the viewer. 
          * 
-         * If you want the {@link Lister} rather than the Tab, the **parentlister** property (above) should be used, as it is more persistent. Additionally, do not assume parenttab is still the active tab in the Lister; query the Lister object if you need that. 
+         * If you want the {@link Lister} rather than the Tab, the **parentlister** property (above) should be used, as it is more persistent. Additionally, do not assume **parenttab** is still the active tab in the Lister; query the Lister object if you need that. 
          * 
-         * This property is a snapshot of the situation when the Viewer scripting object was created; it won't change in reaction to script actions. */
+         * This property is a snapshot of the situation when the **Viewer** scripting object was created; it won't change in reaction to script actions. */
         parenttab: Tab;
         /** Returns the right coordinate of the viewer window. */
         right: number;
@@ -5477,7 +5751,7 @@ declare global {
          * - **mclick**: The middle button was clicked on the image.
          */
         event: string;
-        /** For the load event, returns an {@link Item} object representing the newly loaded image. */
+        /** For the **load** event, returns an {@link Item} object representing the newly loaded image. */
         item: Item;
         /** Returns a {@link Viewer} object representing the viewer the event occurred in. */
         viewer: Viewer;
@@ -5493,13 +5767,13 @@ declare global {
 
     /** Returns the current pattern in the Wild object */
     interface Wild {
-        /** Escapes all wildcard characters in the input string and returns the result. For example, "the * 'dog' said *" would be conterted to "the '* ''dog'' said '*".
+        /** Escapes all wildcard characters in the input string and returns the result. For example, **"the \* 'dog' said \*"** would be conterted to **"the '\* "dog" said '\*"**.
          * 
-         * The optional type argument lets you specify the conversion:
-         * - none: Escape characters used in standard pattern matching
+         * The optional *type* argument lets you specify the conversion:
+         * - *none*: Escape characters used in standard pattern matching
          * - r: Escape characters used in regular expressions
          * - b: Double all back-slashes
-         * - n: Double all back-slashes that come before the letter 'n'
+         * - n: Double all back-slashes that come before the letter '**n**'
          * 
          * Note that these modes ***cannot*** be combined. */
         EscapeString(input: string, type?: string): string;
@@ -5518,8 +5792,9 @@ declare global {
          * - p : partial matching
          * - n : force partial match on for regular expression (see below)
          * 
-         * By default this uses standard pattern matching - specify the r flag to use regular expressions instead. 
-         * For regular expression, partial match is automatically disabled if the pattern begins or ends with a `.*` sequence. To prevent this, specify the n flag. This forces partial match (as the "normal" regex behaviour), but you can perform a non-partial match by adding `^` to the start and `$` to the end of the pattern.
+         * By default this uses standard pattern matching - specify the **r** flag to use regular expressions instead. 
+         * 
+         * For regular expression, partial match is automatically disabled if the pattern begins or ends with a `.*` sequence. To prevent this, specify the **n** flag. This forces partial match (as the "normal" regex behaviour), but you can perform a non-partial match by adding `^` to the start and `$` to the end of the pattern.
          */
         Parse(pattern: string, flags?: string): boolean;
         /** Default Value.
@@ -5571,18 +5846,18 @@ declare global {
         /** Returns the value associated with the specified key. */
         (key: TKey): TValue;
 
-        /** Number of elements in the map. */
+        /** Number of elements the **Map** currently hoolds. */
         count: number;
         /** True if the map is empty. */
         empty: boolean;
-        /** Synonym for count. */
+        /** Synonym for **count**. */
         length: number;
-        /** Synonym for count. */
+        /** Synonym for **count**. */
         size: number;
 
-        /** Copies the contents of another Map into this one, replacing any existing contents. */
+        /** Copies the contents of another **Map** into this one. */
         assign(from: DOpusMap<any, any>): void;
-        /** Clears the contents of the Map. */
+        /** Clears the contents of the **Map**. */
         clear(): void;
         /** Erases the specified element if it exists. */
         erase(key: TKey): void;
@@ -5590,9 +5865,9 @@ declare global {
         exists(key: TKey): boolean;
         /** Returns the value associated with the specified key. */
         get(key: TKey): TValue;
-        /** Merges the contents of another Map into this one. */
+        /** Merges the contents of another **Map** with this one. Where the same key exists in both maps, the existing value will be kept. You can do the merge the other way around if you want the opposite. */
         merge(from: DOpusMap<any, any>): void;
-        /** Sets the value associated with the specified key. */
+        /** Sets the value of the specified key. */
         set(key: TKey, value: TValue): void;
     }
 
@@ -5907,6 +6182,17 @@ declare global {
 export {};
 
 
+// V1.2 :
+// - JSDoc updated up to (incl.) WinVer object (no more Objects)
+// - Introduced type DopusDialogFactory (which extends Dialog). Used as a propery in DOpus interface. Allows both usage 'var dlg = DOpus.Dlg;' and 'var dlg = DOpus.Dlg();'
+// - Changed type File to DOpusFile to avoid confusion with the standard File type in TypeScript. DOpusFile is now used for the file objects returned by Opus, and File is reserved for the standard JavaScript File type (e.g. from an <input type="file"> element).
+// - MenuItem.submenu type change from boolean to Menu.
+// - Menu.Show: fixed value (r > g) for right alignement. Documentation issue in Opus to report (the release notes from 13.21.1 were ok).
+// - Fixed DOpus.LoadImage signatures (signature differs depending on the first parameter being a Blob or a string)
+// - Updated to fit 13.24 updates to scripting interface
+
+
+
 // V1.1 :
 // - Updated to suit 13.23 changes
 // - JSDoc updated up to FSUtil object (formatting and objects links)
@@ -5920,8 +6206,15 @@ export {};
 
 
 // Notes : 
+
+// * Reported on forum
+// *************************
 // * Documentation is missing description for OnAddConfigPages, OnConfigureScript (13.17)
 // * Also misses the AddConfigPagesData, ConfigureScriptData objects (13.17)
 // * Dialog.AddConfigPages is missing from the documentation, but is required for OnAddConfigPages (13.17)
 // * OnOpenTab : First line "The On event" => "The OnOpenTab event"
 // * OnScriptCommand : According to the description, you can either return True or 1 : return type should be int or type 
+
+// * To report on forum
+// **********************
+// * DOpus.LoadImage has not been updated to integrate SVG support which leads to another signature (if svg code is provided as first argument, last argument is not alpha but remove_padding)

@@ -10,6 +10,9 @@
       "opus-types": ["./OpusDevTools/typings/index.d.ts"]
     }
   },
+  "typeAcquisition": {
+    "include": ["javascript"]
+  },
   "include": [
     "index.d.ts",
     "OpusDevTools/typings/index.d.ts",
