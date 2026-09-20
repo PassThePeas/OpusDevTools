@@ -63,6 +63,7 @@ declare global {
         AddColumn(): ScriptColumn;
     }
 
+    /** The AddConfigPagesData object is passed to the OnAddConfigPagesEvent event in a script add-in. The object has no public methods or properties. Your add-in must pass the object unchanged through to the Dialog.AddConfigPages() method in order to add pages to the configuration dialog. */
     interface AddConfigPagesData {
     }
 
@@ -290,7 +291,7 @@ declare global {
         backcol: string;
         /** The button's description (tooltip). */
         desc: string;
-        /** The main icon for the button; you can specify either an internal icon name (e.g. `#copy`) or the full path of an external image file or icon. You can extract icons from DLLs etc by appending a comma and the icon index to the file name. */
+        /** The main icon for the button; you can specify either an internal icon name (e.g. `#copy`) or the full path of an external image file or icon. You can extract icons from DLLs etc by appending a comma and the icon index to the file name. You can also provide an {@link Image} object.*/
         image: string;
         /** The secondary icon for the button. */
         image2: string;
@@ -562,6 +563,7 @@ declare global {
         step: string;
     }
 
+    /** If a script add-in provides an OnConfigureScript method, it is passed a ConfigureScriptData object when invoked via the user clicking the Configure button in the Script Management dialog. */
     interface ConfigureScriptData {
         /** This is a handle to the parent window that the script should use if displaying a dialog via the {@link Dialog} object. Even though this is not a {@link Lister} or {@link Tab}, it can still be assigned to the Dialog.window property to set the parent window of the dialog. */
         window: number;
@@ -614,7 +616,16 @@ declare global {
         redraw: boolean;
         /** For a *static text* control set to "image" mode, you can set this property to rotate the displayed image. The value provided is the number of degrees from the image's initial orientation. */
         rotate: number;
-        /** Set or query the font styles used to display this control's label. The string consists of zero or more characters; valid characters are b for bold and i for italics. Currently only static text controls are supported for this property. */
+        /** For a *static text* control, this property is used to set or query the font styles used to display this control's label. The string consists of zero or more characters; valid characters are **b** for bold and **i** for italics. 
+         * 
+         * For a *palette* control, this property lets you set or query the control's options using various style flags. Valid flags are:
+         * - a : Palette type: alpha
+         * - t : Palette type: transparent
+         * - d : Palette type: default
+         * - n : No arrow
+         * - c : Can disable
+         * - m : Decimal
+         *  */
         style: string;
         /** Set or query the color used for the text background (fill) of this control. This is in the format `#RRGGBB` (hexadecimal) or `RRR,GGG,BBB` (decimal). 
          * 
@@ -650,11 +661,15 @@ declare global {
         y: number;
         /** Adds a new group to a list view control. Items you add to the list can optionally be placed in groups. Each group must have a unique ID. The optional flags are "c" (group is collapsible) and "d" (group starts out collapsed). E.g. AddGroup("Unimportant", 100, "cd") would add a group called Unimportant that is initially collapsed. */
         AddGroup(name: string, id: number, flags: string): number;
-        /** Adds a new item to the control (list box, combo box or list view). The first parameter is the item's name, and the optional second parameter is a data value to associate with the item. When adding to a grouped list view, the optional third parameter provides the ID of the group you want to add the item to (the second parameter must be provided in this case, and can be set to 0 if no value is required). The item is added to the end of the list. Instead of the name and value you can also pass a DialogListItem object obtained from another control. This will copy the name and value from the existing item, but won't copy its group (since the new list may have different groups). You can assign the new item to a group with the optional second parameter. For a list view control, you can also pass a Vector (or JScript array) of strings to add an item and its subitems all at once. You can also pass a two-dimensional array to add multiple items, each with their own sub-items. The return value indicates the position in the list of the new item. If you are adding to a listview control and need to add an item with multiple columns, you can do it like this (JScript):  var i = listview.AddItem("This is col 1"); listview.GetItemAt(i).subitems(0) = "This is col 2"; listview.GetItemAt(i).subitems(1) = "This is col 3";   For a tab control, this lets you add back a tab that you've previously removed via the RemoveItem method. Only the name argument is used, which indicates the name of the child dialog to add back to the control. */
+        /** Adds a new item to the control (list box, combo box or list view). The first parameter is the item's name, and the optional second parameter is a data value to associate with the item. 
+         * 
+         * When adding to a grouped *list view*, the optional third parameter provides the ID of the group you want to add the item to (the second parameter must be provided in this case, and can be set to 0 if no value is required). 
+         * 
+         * The item is added to the end of the list. 
+         * 
+         * Instead of the name and value you can also pass a {@link DialogListItem} object obtained from another control. This will copy the name and value from the existing item, but won't copy its group (since the new list may have different groups). You can assign the new item to a group with the optional second parameter. For a list view control, you can also pass a Vector (or JScript array) of strings to add an item and its subitems all at once. You can also pass a two-dimensional array to add multiple items, each with their own sub-items. The return value indicates the position in the list of the new item. If you are adding to a listview control and need to add an item with multiple columns, you can do it like this (JScript):  var i = listview.AddItem("This is col 1"); listview.GetItemAt(i).subitems(0) = "This is col 2"; listview.GetItemAt(i).subitems(1) = "This is col 3";   For a tab control, this lets you add back a tab that you've previously removed via the RemoveItem method. Only the name argument is used, which indicates the name of the child dialog to add back to the control. */
         AddItem(name: string, value?: number, groupid?: number): number;
-        /** Adds a new item to the control (list box, combo box or list view). The first parameter is the item's name, and the optional second parameter is a data value to associate with the item. When adding to a grouped list view, the optional third parameter provides the ID of the group you want to add the item to (the second parameter must be provided in this case, and can be set to 0 if no value is required). The item is added to the end of the list. Instead of the name and value you can also pass a DialogListItem object obtained from another control. This will copy the name and value from the existing item, but won't copy its group (since the new list may have different groups). You can assign the new item to a group with the optional second parameter. For a list view control, you can also pass a Vector (or JScript array) of strings to add an item and its subitems all at once. You can also pass a two-dimensional array to add multiple items, each with their own sub-items. The return value indicates the position in the list of the new item. If you are adding to a listview control and need to add an item with multiple columns, you can do it like this (JScript):  var i = listview.AddItem("This is col 1"); listview.GetItemAt(i).subitems(0) = "This is col 2"; listview.GetItemAt(i).subitems(1) = "This is col 3";   For a tab control, this lets you add back a tab that you've previously removed via the RemoveItem method. Only the name argument is used, which indicates the name of the child dialog to add back to the control. */
-        AddItem(item: DialogListItem, groupid?: number): number;
-        /** Adds a new item to the control (*list box*, *combo box* or *list view*). The first parameter is the item's name, and the optional second parameter is a data value to associate with the item. 
+                /** Adds a new item to the control (*list box*, *combo box* or *list view*). The first parameter is the item's name, and the optional second parameter is a data value to associate with the item. 
          * 
          * When adding to a grouped *list view*, the optional third parameter provides the ID of the group you want to add the item to (the second parameter must be provided in this case, and can be set to 0 if no value is required). 
          * 
@@ -662,7 +677,10 @@ declare global {
          * 
          * Instead of the *name* and *value* you can also pass a {@link DialogListItem} object obtained from another control. This will copy the name and value from the existing item, but won't copy its group (since the new list may have different groups). You can assign the new item to a group with the optional second parameter. 
          * 
-         * For a *list view* control, you can also pass a {@link Vector} (or JScript array) of strings to add an item and its subitems all at once. You can also pass a two-dimensional array to add multiple items, each with their own sub-items. 
+         * For a *list view* control, you can also pass:
+         * - A {@link Vector} (or JScript array) of strings to add an item and its subitems all at once. 
+         * - A two-dimensional array to add multiple items, each with their own sub-items.
+         * - A {@link Vector} of {@link DOpusMap|Map} items to add multiple items and subitems, specifying the column names directly. Each **Map** should contain key/value pairs for the column data to insert. By default the column titles are used as the keys but you can specify different (language-neutral, for example) keys with the {@link SetColumnPropertyNames} method.
          * 
          * The return value indicates the position in the list of the new item. 
          * 
@@ -673,7 +691,30 @@ declare global {
          *  listview.GetItemAt(i).subitems(1) = "This is col 3";
          * ```
          * For a *tab control*, this lets you add back a tab that you've previously removed via the **RemoveItem** method. Only the *name* argument is used, which indicates the name of the child dialog to add back to the control. */
-        AddItem(itemAsArray: string[] | Vector<string>, value?: number, groupid?: number): number;
+        AddItem(item: DialogListItem, groupid?: number): number;
+        /** Adds a new item to the control (*list box*, *combo box* or *list view*). The first parameter is the item's name, and the optional second parameter is a data value to associate with the item. 
+         * 
+         * When adding to a grouped *list view*, the optional third parameter provides the ID of the group you want to add the item to (the second parameter must be provided in this case, and can be set to 0 if no value is required). 
+         * 
+         * The item is added to the end of the list. 
+         * 
+         * Instead of the *name* and *value* you can also pass a {@link DialogListItem} object obtained from another control. This will copy the name and value from the existing item, but won't copy its group (since the new list may have different groups). You can assign the new item to a group with the optional second parameter. 
+         * 
+         * For a *list view* control, you can also pass:
+         * - A {@link Vector} (or JScript array) of strings to add an item and its subitems all at once. 
+         * - A two-dimensional array to add multiple items, each with their own sub-items.
+         * - A {@link Vector} of {@link DOpusMap|Map} items to add multiple items and subitems, specifying the column names directly. Each **Map** should contain key/value pairs for the column data to insert. By default the column titles are used as the keys but you can specify different (language-neutral, for example) keys with the {@link SetColumnPropertyNames} method.
+         * 
+         * The return value indicates the position in the list of the new item. 
+         * 
+         * If you are adding to a listview control and need to add an item with multiple columns, you can do it like this (JScript):
+         * ```javascript
+         *  var i = listview.AddItem("This is col 1");
+         *  listview.GetItemAt(i).subitems(0) = "This is col 2";
+         *  listview.GetItemAt(i).subitems(1) = "This is col 3";
+         * ```
+         * For a *tab control*, this lets you add back a tab that you've previously removed via the **RemoveItem** method. Only the *name* argument is used, which indicates the name of the child dialog to add back to the control. */
+        AddItem(itemAsArray: string[] | Vector<string|DOpusMap>, value?: number, groupid?: number): number;
         /** Adds a text string as an overlay on a static control in image mode (i.e. lets you overlay text on images). 
          * 
          * The text parameter must be a {@link DOpusMapObject|Map} object (created via the {@link DOpusFactory.Map} method, with the following member values to define the text. All values are optional.
@@ -769,24 +810,17 @@ declare global {
          * 
          * Instead of the *name* and *value* you can also pass a {@link DialogListItem} object obtained from another control. This will copy the name and value from the existing item, but won't copy its group (since the new list may have different groups). You can assign the new item to a group with the optional third parameter. 
          * 
-         * For a *list view* control, you can also pass a {@link Vector} (or JScript array) of strings to add an item and its subitems all at once. You can also pass a two-dimensional array to add multiple items, each with their own sub-items. 
+         * For a *list view* control, you can also pass:
+         * - A {@link Vector} (or JScript array) of strings to add an item and its subitems all at once. 
+         * - A two-dimensional array to add multiple items, each with their own sub-items.
+         * - A {@link Vector} of {@link DOpusMap|Map} items to add multiple items and subitems, specifying the column names directly. Each **Map** should contain key/value pairs for the column data to insert. By default the column titles are used as the keys but you can specify different (language-neutral, for example) keys with the {@link SetColumnPropertyNames} method.
+         * 
+         * The return value indicates the position in the list of the new item. 
          * 
          * For a *tab control*, this lets you add back a tab that you've previously removed via the **RemoveItem** method. Only the *position* and *name* arguments are used. The *name* argument indicates the name of the child dialog to add back to the control. 
          * 
          * The return value indicates the position in the list of the new item. */
-        InsertItemAt(position: number, vector: Vector<string>, value?: number, groupid?: number): number;
-        /** Inserts a new item in the control (*list box*, *combo box* or *list view*). The first parameter is the position to insert the item at (0 means the beginning of the list, 1 means the second position and so on). The second parameter is the item's name, and the optional third parameter is a data value to associate with the item. 
-         * 
-         * When adding to a grouped *list view*, the optional fourth parameter provides the ID of the group you want to add the item to (the third parameter must be provided in this case, and can be set to 0 if no value is required). 
-         * 
-         * Instead of the *name* and *value* you can also pass a {@link DialogListItem} object obtained from another control. This will copy the name and value from the existing item, but won't copy its group (since the new list may have different groups). You can assign the new item to a group with the optional third parameter. 
-         * 
-         * For a *list view* control, you can also pass a {@link Vector} (or JScript array) of strings to add an item and its subitems all at once. You can also pass a two-dimensional array to add multiple items, each with their own sub-items. 
-         * 
-         * For a *tab control*, this lets you add back a tab that you've previously removed via the **RemoveItem** method. Only the *position* and *name* arguments are used. The *name* argument indicates the name of the child dialog to add back to the control. 
-         * 
-         * The return value indicates the position in the list of the new item. */
-        InsertItemAt(position: number, array: any[], value?: number, groupid?: number): number;
+        InsertItemAt(position: number, itemsAsArray: string[] | Vector<string | DOpusMap>, value?: number, groupid?: number): number;
         /** Inverts the selection status of all items in the control. */
         InvertSelection(): void;
         /** Modifies an existing text element in a static control. The id argument indicates the text element to modify, this is returned by the **AddText** method. See the **AddText** method for a description of the text argument. */
@@ -882,11 +916,16 @@ declare global {
          * - Call with a callback function to implement custom sort order. Your callback will be called with two {@link DialogListGroup} objects, and should return the result of the comparison between the two (<0 if group1 < group2, 0 if group1 == group2, >0 if group1 > group2)
          */
         SortGroups(directionOrCallback: number | DialogGroupSortCallback): void;
-        /**Sorts the items in a listview control. You can use this in two ways:
-         * - Call with a 1-based column index to sort by that column. Use a negative number for a reverse sort.
-         * - Call with a callback function to implement custom sort order. Your callback will be called with two {@link DialogListItem} objects, and should return the result of the comparison between the two (<0 if item1 < item2, 0 if item1 == item2, >0 if item1 > item2)
+        /**Sorts the items in a listview control. In this form:
+         * - The first argument, index, is the 1-based column index to sort by that column. Use a negative number for a reverse sort.
+         * - The the second argument is a flags value. Currently the only flag defined is "n", which performs a numeric string sort rather than a standard lexicographical sort.
          */
-        SortItems(indexOrCallback: number | DialogItemSortCallback): void;
+        SortItems(index: number, flags?: string): void;
+        /**Sorts the items in a listview control. In this form:
+         * - The first argument, callback, is a callback function to implement custom sort order. Your callback will be called with two {@link DialogListItem} objects, and should return the result of the comparison between the two (<0 if item1 < item2, 0 if item1 == item2, >0 if item1 > item2)
+         * - The second argument lets you specify the current sort column. The arrow indicator in the sort header will be updated to reflect the new column.
+         */
+        SortItems(callback: DialogItemSortCallback, index: number): void;
     }
 
     // Defining callback types
@@ -1274,7 +1313,11 @@ declare global {
          * 
          * The *id* string is a string that Opus can use to identify your dialog or the script it comes from. The template name of the dialog will be automatically appended to this. For example, you might specify *id* as *"kundal"* - Opus would then internally save the position of a dialog called *"dialog1"* as *"kundal!dialog1"*. Make sure you pick a string that other script authors are unlikely to use as Opus has no other way of telling the saved positions apart. 
          * 
-         * The optional type parameter lets you control which position elements are restored - specify *"pos"* to only restore the position, *"size"* to only restore the size, or *"pos,size"* to restore both (this is also the default, so you can also omit the argument all together). Use *"fix"* or *"nofix"* to override the position_fix property.*/
+         * The optional type parameter lets you control which position elements are restored - specify *"pos"* to only restore the position, *"size"* to only restore the size, or *"pos,size"* to restore both (this is also the default, so you can also omit the argument all together). 
+         * 
+         * By default this function respects the `position_fix` property - if set to true, the dialog's loaded position will be checked to see if it's off-screen and brought back into view automatically. 
+         * You can override this with the keywords `fix` and `nofix` for the **type** parameter. For example, *"pos,nofix"* would load the position without checking it.
+         */
         LoadPosition(id: string, type?: string): void;
         /** Displays a "Browse to Open File" dialog that lets the user select one or more files. The optional parameters are:
          * - *title* : specify title of the dialog,
@@ -2471,10 +2514,19 @@ declare global {
     }
 
     interface FolderEnum {
+        /** Sets an attribute filter to filter the enumeration. Only items without the specified attributes will be returned. */
+        attrexclude: string;
+        /** Sets an attribute filter to filter the enumeration. 
+         * Only items with attributes matching those specified will be returned. 
+         * For example, `folderEnum.attrinclude="hs";` would only return items with both the hidden+system attributes set. */
+        attrinclude: string;
         /** True if the enumeration is complete, otherwise False. */
         complete: boolean;
         /** If an error occurs this will return the error code. It will return 0 on success. */
         error: number;
+        /** Sets a wildcard pattern to filter the enumeration (prefix with "regex:" for regular expression). 
+         * For example, `folderEnum.wildcard="a*";` would only return filenames beginning with 'a'. */
+        wildcard: string;
         /** Closes the underlying file system handle used to perform the enumeration. You might call this method if you want to delete the folder you just enumerated. After this method is called the complete property will return True. */
         Close(): void;
         /** Returns the next item in the enumeration. By default (with no arguments provided) a single Item object is returned. For higher performance, you can specify a number as the first argument to return more than one item at once - in this case, a Vector of Item objects is returned instead. Specify -1 to return all items in the folder in one call. You can also create your own Vector and pass it as the second argument to stop Opus creating a new Vector each time. */
@@ -2877,13 +2929,19 @@ declare global {
          * 
          * If not told to wait for results, this method returns true or false.
          * If waiting for results, returns false on failure, or a RunResults object on success.
+         * 
+         * If running from a script dialog you can also wait asynchronously for results. 
+         * Pass your {@link Dialog} handle as the seventh argument (or `dialog` property of the arguments map). 
+         * The return value from the `Run` method in that case will be an ID number which identifies the task. 
+         * Your message loop will receive a "run" message with this ID as the {@link Msg.data} property. 
+         * The {@link Msg.state} property indicates whether the program was launched successfully or not, and the {@link Msg.object} property contains the {@link RunResults} object.
          */
-        Run(cmdline: string, show: number, flags?: string, input?: string, curdir?: string, encode?:string): boolean | RunResults;
+        Run(cmdline: string, show?: number, flags?: string, input?: string, curdir?: string, encode?:string, callbackDialog?: Dialog): boolean | RunResults | number;
         /** Allows you to run external programs and optionally capture their output. 
          * 
-         * Instead of six separate arguments, this method also supports receiving its arguments via a {@link DOpusMap|Map} object. 
+         * Instead of seven separate arguments, this method also supports receiving its arguments via a {@link DOpusMap|Map} object. 
          * 
-         * The parameters can be provided as values of the Map, with the following names: "command", "showcmd", "flags", "input", "cd" and "codepage".
+         * The parameters can be provided as values of the Map, with the following names: "command", "showcmd", "flags", "input", "cd", "codepage" and "dialog".
          */
         Run(args: DOpusMap<any>): boolean | RunResults;
         /** Returns True if the two specified paths both refer to the same drive or partition.
@@ -2925,6 +2983,12 @@ declare global {
         args: Args;
         /** Returns a {@link DOpusMap|Map} object that provides keyword lookup for each of the arguments given on the command line. An argument will only be present in the {@link DOpusMap|Map} if it was used on the command line, so you can easily check which arguments are present using the {@link DOpusMap.exists()|Map.exists()} method. */
         argsmap: DOpusMap<any>;
+        /** In functions launched by clicking a toolbar button, this provides the position on-screen of the button. You can also use the {@link click_pt} value to obtain the position of the mouse pointer. This would, for example, let you configure buttons to perform different functions depending on which part of the button was clicked. */
+        button_rect: Rect;
+        /** In functions launched by clicking a toolbar button, this returns l, m or r to identify which mouse button was clicked (left / middle / right), or an empty string if not applicable. */
+        click_button: string;
+        /** In functions launched by clicking a toolbar button, this provides the position of the mouse pointer when the button was clicked. */
+        click_pt: Point;
         /** This property returns a pre-filled {@link Command} object that can be used to run commands against the source and destination tabs. Using this object is the equivalent of calling {@link DOpusFactory.Command} and setting the source and destination tabs manually. */
         command: Command;
         /** This object represents the default destination tab for the function. */
@@ -3799,6 +3863,8 @@ declare global {
         qualifiers: string;
         /** Returns True if the message is valid, or False if the dialog has been closed. */
         result: boolean;
+        /** For a **run** message this indicates whether the program was launched successfully or not. */
+        state: boolean;
         /** Returns the subitem (column) number for listview controls with **rclick** and **dblclk** events. */
         subitem: number;
         /** For a dialog tab control, returns the name of the parent tab (if the control is on a dialog that's inside a tab control). 
@@ -3988,6 +4054,14 @@ declare global {
         folder: string;
     }
 
+    interface Point {
+        /** Returns the x coordinate. */
+        x: number;
+        /** Returns the y coordinate. */
+        y: number;
+        /** Returns the x and y coordinates as a string. */
+        ToString(): string;   }
+
     interface PowerEventData {
         /** Returns data for this event. The meaning of this property varies depending on the value of the **type** property. */
         data: string;
@@ -4096,6 +4170,8 @@ declare global {
 
     /** Returns the current filter string, if any. */
     interface QuickFilter {
+        /** Returns True if the "any word" option is turned on. */
+        anyword: boolean;
         /** Returns True if the auto-clear mode is set in Preferences. */
         autoclear: boolean;
         /** Returns True if the auto-star mode is set in Preferences. */
@@ -4104,6 +4180,8 @@ declare global {
         disable: boolean;
         /** Returns True if easy mode is selected. */
         easymode: boolean;
+        /** Returns True if evaluator mode is enabled. */
+        eval: boolean;
         /** Returns the current filter string. */
         filter: string;
         /** Returns True if folder filtering in flatview is on. */
@@ -4256,7 +4334,7 @@ declare global {
         /** Set to True to have this column blurred when taking a secure screenshot. */
         blurrable: boolean;
         /**
-         * By default script columns appear in the **Script** category, but if you set this value you can make them appear in one of the other column categories.
+         * By default script columns appear in the **Script** category, but if you set this value you can make them appear in one or more of the other column categories.
          * 
          * Possible valuesfor keywords (and their associated categories):
          *  - "sums" (Checksums)
@@ -4273,6 +4351,8 @@ declare global {
          *  - "prog" (Programs)
          *  - "shell" (Shell)
          *  - "size" (Size and Count)
+         * 
+         * You can specify multiple comma-separated keywords to place your column in multiple categories.
          */
         category: 'sums' | 'date' | 'doc' | 'eval' | 'std' | 'movie' | 'music' | 'loc' | 'other' | 'dims' | 'image' | 'prog' | 'shell' | 'size';
         /** This property lets you control the default sort behavior for your column. 
@@ -4363,6 +4443,7 @@ declare global {
          * - **time**        : The column displays a time
          * - **datetime**    : The column displays both a date and a time
          * - **stars**       : The column displays stars (similar to the built-in Rating column)
+         * - **bool**        : The column displays Yes or No in the current language. The value provided provided by the script should be 0 or non-0.
          * 
          * For plain text columns, you can specify **numericsort** or **nonumericsort** to override the "numeric order filename sorting" setting in Folder Options. Similarly, **wordsort** or **nowordsort** can be used to override the "word sort (special handling for hyphens, etc.)" setting. 
          * You can also combine both options, e.g. **nonumericsort**,**nowordsort** to request only basic sorting. Leave the type unset, or set it to an empty string, for plain text data which respects the Folder Options sort settings. 
@@ -5650,6 +5731,8 @@ declare global {
         files: Items;
         /** Returns True if the viewer is currently the foreground (active) window in the system. */
         foreground: boolean;
+        /** Returns a unique ID for this viewer instance. */
+        id: number;
         /** Returns a {@link Rect} object representing the size of the currently displayed image (native size, ignoring any scaling). */
         imagesize: Rect;
         /** Returns the index of the currently viewed image within the viewer's list of files. */
@@ -5701,6 +5784,8 @@ declare global {
         title: string;
         /** Returns the top coordinate of the viewer window. */
         top: number;
+        /** Returns a {@link Vars} object local to the Viewer. Each standalone viewer has its own set of variables. Viewer variables are not persisted to disk and only last until the viewer is closed.*/
+        vars: Vars;
         /** Adds the specified file to the viewer's current list of files. You can either pass a string or a {@link Path} object to indicate the file to  add to the list. 
          * 
          * By default the file will be added to the end of the list, unless you specify a 0-based index as the second argument. */
@@ -5920,7 +6005,12 @@ declare global {
      */
     type OpusOnAddCommands = (addCmdData: AddCmdData) => void;
 
-    /** The OnAddConfigPages event can be implemented by a script add-in to add custom configuration pages to the script configuration dialog. The **addConfigPagesData** parameter needs to be provided to the DialogAddConfigPages method called from this event. */
+    /** The OnAddConfigPages event is called to allow your script add-in to add one or more pages to the script configuration dialog. Any "regular" script configuration values defined by your script in OnInit are still shown to the user on the first tab of the dialog, and your custom dialogs are shown on the subsequent pages.
+     * 
+     * The script must create a detached dialog containing a tab control with at least one tab. 
+     * It must run a normal script message loop and handle all message processing as normal. 
+     * The only difference is that instead of calling Dialog.Show() the script must call {@link Dialog.AddConfigPages}(), and pass through the {@link AddConfigPagesData} object that's supplied to the method. 
+     */
     type OpusOnAddConfigPages = (addConfigPagesData: AddConfigPagesData) => void;
 
     /** The OnAfterFolderChange event can be implemented by a script add-in that wants to be notified after a new folder has been read in a tab. Use the {@link OpusOnBeforeFolderChange|OnBeforeFolderChange} event to receive notification *before* the folder is read.
@@ -5969,7 +6059,12 @@ declare global {
     /** The OnConfigRestore event can be implemented by a script add-in to receive notification when the Opus configuration is being restored from a backup. */
     type OpusOnConfigRestore = (configRestoreData: ConfigRestoreData) => void;
 
-    /** The OnConfigureScript event can be implemented by a script add-in. Similar to the OnAboutScript method, this lets a script take over the configuration function completely and display its own dialog when the config button is pressed. */
+    /** The OnConfigureScript event can be implemented by a script add-in in order to replace the standard configuration dialog for your script. When the user clicks the Configure button in the Script Management dialog, your script will be called and you should display an appropriate dialog letting the user modify your script's configuration.
+     * 
+     * Implementing this method means the script can't use the standard configuration system (via OnInit), because there would be no way for the user to configure it.
+     * 
+     * The usual implementation for this event would use the ConfigureScriptData.window parameter to display a dialog using the {@link Dialog} object.
+     */
     type OpusOnConfigureScript = (configureScriptData: ConfigureScriptData) => void;
 
     /** The OnDeleteScript event can be implemented by a script add-in to receive notification when (if) it's deleted by the user via the Scripts management user interface. You might want to use this to cleanup any data files your script has created. */
@@ -6113,9 +6208,14 @@ declare global {
      * 
      * The {@link ScriptCommandData.func} property provides information about the command environment (including any parsed arguments), and the {@link ScriptCommandData.cmdline|cmdline} property provides the raw command line that invoked your command.
      * 
-     * Return the value `1` from this event if you want your function to be called once for each selected file. Otherwise your entry point will only be called once, and you can query all selected files using the various objects provided.
+     * The return value from this function indicates to Opus whether your function was successful or not and whether it should be called again for the next selected file. 
+     * If successful, the return code should indicate the number of files consumed by the function - normally this would be 1 which would mean you would be called separately for each file.
      * 
-     * If this event returns True the function will be aborted - you might do this if an error occurs and the user chooses to abort the operation.
+     * Return values/meaning table:
+     * - **-1**: Function was successful. All files will be deselected.
+     * - **1**! Function was successful. First file will be deselected, and your function will be called again for the next file.
+     * - **True**: Function failed. Files will remain selected.
+     * - **False**: Same as returning -1.
     */
     type OpusOnScriptCommand = (scriptCommandData: ScriptCommandData) => boolean | number;
 
@@ -6181,6 +6281,27 @@ declare global {
 }
 export {};
 
+// ========== LATEST RELEASE NOTES ==========
+
+// V1.3
+// - Adjusted comments for OpusAddConfigPagesData, OpusOnConfigureScript, OpusOnScriptCommand, Dialog.LoadPosition to reflect updated documentation.
+// - Updated to fit 13.25 updates to scripting interface:
+//   * ScriptColumn.type new possible value
+//   * Viewer.id & Viewer.vars: new properties
+//   * Control.SortItems takes a second optional argument
+//   * Control.style: new possible values for palette control
+//   * FolderEnum: new properties (attrexclude, attrinclude, wildcard)
+//   * FSUtil.Run: new additional optional argument (dialog) + associated new Msg.state property
+//   * ListView controls: AddItem and InsertItemAt methods accept a Vector of Map as an argument
+//      /!\ InsertItemAt : description not updated in the docs.
+//   * ScriptColumn.category can now take multiple comma separated values
+//   * Button data properties image and image2 can now take an Image object as value.
+//   * Added anyword & eval properties to QuickFilter object
+//   * Added new Point object
+//   * Added button_rect, click_pt and click_button properties to Func script object
+
+
+// ========== OLD RELEASE NOTES ==========
 
 // V1.2 :
 // - JSDoc updated up to (incl.) WinVer object (no more Objects)
@@ -6190,8 +6311,6 @@ export {};
 // - Menu.Show: fixed value (r > g) for right alignement. Documentation issue in Opus to report (the release notes from 13.21.1 were ok).
 // - Fixed DOpus.LoadImage signatures (signature differs depending on the first parameter being a Blob or a string)
 // - Updated to fit 13.24 updates to scripting interface
-
-
 
 // V1.1 :
 // - Updated to suit 13.23 changes
@@ -6204,9 +6323,7 @@ export {};
 //   - Missing scripting event added : OnAddConfigPages, OnAddConfigPages, OnButtonContext, OnConfigBackup, OnConfigRestore, OnConfigureScript, OnDoubleClick, OnFAYTClose, OnFilesystemChange, OnFileOperationComplete, OnFlatViewChange, OnGetCopyQueueName, OnPeriodicTimer, OnPowerEvent, OnQuickFilterChange, OnScheduledTimer, OnStartup, OnStyleSelected.
 //   - Hallucinated scripting events removed : OnClosePlugin, OnBeginDrag, OnConfigChange, OnGetHelp, OpusOnSelectionChange
 
-
 // Notes : 
-
 // * Reported on forum
 // *************************
 // * Documentation is missing description for OnAddConfigPages, OnConfigureScript (13.17)
